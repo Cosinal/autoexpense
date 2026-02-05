@@ -26,14 +26,21 @@ class ReceiptCreate(ReceiptBase):
     file_hash: str
 
 
-class ReceiptResponse(ReceiptBase):
+class ReceiptResponse(BaseModel):
     """Model for receipt API responses."""
     id: str
     user_id: str
+    vendor: Optional[str] = None
+    amount: Optional[float] = None
+    currency: str = "USD"
+    date: Optional[str] = None  # Store as string (YYYY-MM-DD)
+    tax: Optional[float] = None
+    file_name: Optional[str] = None
     file_url: str
     file_hash: str
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    mime_type: Optional[str] = None
+    created_at: str  # Store as string
+    updated_at: Optional[str] = None
 
     class Config:
         from_attributes = True
