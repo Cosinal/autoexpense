@@ -9,6 +9,8 @@ from datetime import datetime
 
 from app.services.email import EmailService
 from app.services.storage import StorageService
+from app.services.ocr import OCRService
+from app.services.parser import ReceiptParser
 from app.utils.supabase import get_supabase_client
 
 
@@ -19,6 +21,8 @@ class IngestionService:
         """Initialize ingestion service."""
         self.email_service = EmailService()
         self.storage_service = StorageService()
+        self.ocr_service = OCRService()
+        self.parser = ReceiptParser()
         self.supabase = get_supabase_client()
 
     def process_email(self, message_id: str, user_id: str) -> Dict:
@@ -78,13 +82,21 @@ class IngestionService:
                     )
 
                     if file_url:
-                        # Create receipt record (without parsing yet - that's Phase 3)
+                        # Run OCR and parsing on the file
+                        parsed_data = self._process_receipt_file(
+                            file_data=file_data,
+                            mime_type=mime_type,
+                            filename=filename
+                        )
+
+                        # Create receipt record with parsed data
                         receipt_id = self._create_receipt_record(
                             user_id=user_id,
                             file_url=file_url,
                             file_hash=file_hash,
                             file_name=filename,
-                            mime_type=mime_type
+                            mime_type=mime_type,
+                            parsed_data=parsed_data
                         )
 
                         if receipt_id:
@@ -147,13 +159,67 @@ class IngestionService:
 
         return False
 
+    def _process_receipt_file(
+        self,
+        file_data: bytes,
+        mime_type: str,
+        filename: str
+    ) -> Dict:
+        """
+        Process receipt file with OCR and parsing.
+
+        Args:
+            file_data: Raw file bytes
+            mime_type: File MIME type
+            filename: Filename
+
+        Returns:
+            Dictionary with parsed data
+        """
+        try:
+            print(f"  → Running OCR on {filename}...")
+
+            # Extract text using OCR
+            text = self.ocr_service.extract_and_normalize(
+                file_data=file_data,
+                mime_type=mime_type,
+                filename=filename
+            )
+
+            if not text:
+                print("  ⚠ No text extracted from file")
+                return {}
+
+            print(f"  → Extracted {len(text)} characters of text")
+            print(f"  → Parsing receipt data...")
+
+            # Parse the text
+            parsed_data = self.parser.parse(text)
+
+            # Log what we found
+            if parsed_data.get('vendor'):
+                print(f"  → Vendor: {parsed_data['vendor']}")
+            if parsed_data.get('amount'):
+                print(f"  → Amount: {parsed_data['currency']} {parsed_data['amount']}")
+            if parsed_data.get('date'):
+                print(f"  → Date: {parsed_data['date']}")
+
+            print(f"  → Confidence: {parsed_data.get('confidence', 0):.0%}")
+
+            return parsed_data
+
+        except Exception as e:
+            print(f"  ✗ Error processing file: {str(e)}")
+            return {}
+
     def _create_receipt_record(
         self,
         user_id: str,
         file_url: str,
         file_hash: str,
         file_name: str,
-        mime_type: str
+        mime_type: str,
+        parsed_data: Optional[Dict] = None
     ) -> str:
         """
         Create a receipt record in the database.
@@ -169,19 +235,33 @@ class IngestionService:
             Receipt ID if successful, None otherwise
         """
         try:
+            # Start with basic file info
             receipt_data = {
                 'user_id': user_id,
                 'file_url': file_url,
                 'file_hash': file_hash,
                 'file_name': file_name,
                 'mime_type': mime_type,
-                # OCR/parsing fields will be populated in Phase 3
-                'vendor': None,
-                'amount': None,
-                'currency': 'USD',  # Default
-                'date': None,
-                'tax': None
             }
+
+            # Add parsed data if available
+            if parsed_data:
+                receipt_data.update({
+                    'vendor': parsed_data.get('vendor'),
+                    'amount': float(parsed_data['amount']) if parsed_data.get('amount') else None,
+                    'currency': parsed_data.get('currency', 'USD'),
+                    'date': parsed_data.get('date'),
+                    'tax': float(parsed_data['tax']) if parsed_data.get('tax') else None,
+                })
+            else:
+                # No parsed data, use defaults
+                receipt_data.update({
+                    'vendor': None,
+                    'amount': None,
+                    'currency': 'USD',
+                    'date': None,
+                    'tax': None,
+                })
 
             response = self.supabase.table('receipts').insert(receipt_data).execute()
 
