@@ -37,11 +37,15 @@ This sets up:
 - ✓ User permissions
 - ✓ Service role access
 
-### Migration 3: Storage Bucket
+### Migration 3: Storage Bucket (UI Method)
 
-Open `database/migrations/003_storage_setup.sql` and copy all contents.
+**Note**: Storage policies must be created through the Supabase dashboard UI, not SQL.
 
-Paste into Supabase SQL Editor and click **Run**.
+Follow the instructions in `database/migrations/003_storage_setup_UI.md`:
+
+1. Go to **Storage** → Create `receipts` bucket (private)
+2. Add 4 policies for INSERT, SELECT, UPDATE, DELETE operations
+3. Each policy restricts users to their own folder
 
 This creates:
 - ✓ `receipts` storage bucket
