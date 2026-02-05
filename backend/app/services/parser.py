@@ -20,10 +20,12 @@ class ReceiptParser:
 
         # Amount patterns
         self.amount_patterns = [
-            # $99.99, $1,234.56
-            r'\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',
-            # TOTAL: 99.99, Total 99.99
-            r'(?:total|amount|sum)[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # $99.99, $1,234.56, € 99.99, €99.99
+            r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',
+            # € 3,442.77 with spaces
+            r'€\s+(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # TOTAL: 99.99, Total 99.99, Total Paid 99.99
+            r'(?:total|amount|sum|paid)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # 99.99 at end of line (common in receipts)
             r'(\d{1,3}(?:,\d{3})*\.\d{2})\s*$',
         ]
@@ -36,16 +38,20 @@ class ReceiptParser:
             r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
             # Month DD, YYYY (Jan 15, 2024)
             r'([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})',
+            # Month DD/YYYY (April 9/2025)
+            r'([A-Za-z]{3,9}\s+\d{1,2}/\d{4})',
             # YYYY-MM-DD (ISO format)
             r'(\d{4}-\d{2}-\d{2})',
         ]
 
         # Tax patterns
         self.tax_patterns = [
-            # Tax: $5.99, TAX 5.99
-            r'tax[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # Sales Tax, HST, GST, VAT
-            r'(?:sales tax|hst|gst|vat)[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # VAT (23%): € 643.77 - with percentage and currency
+            r'vat[\s:()%\d]*[$€£¥]?\s+(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # Tax: $5.99, TAX 5.99, VAT: € 5.99
+            r'tax[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # Sales Tax, HST, GST with currency symbols
+            r'(?:sales tax|hst|gst)[\s:()%]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
         ]
 
         # Currency symbols
@@ -102,6 +108,9 @@ class ReceiptParser:
             for line in lines[:5]:
                 line = line.strip()
 
+                # Remove leading garbage characters
+                line = re.sub(r'^[^\w\s]+', '', line)
+
                 # Skip empty lines, dates, and numbers
                 if not line or len(line) < 3:
                     continue
@@ -110,9 +119,9 @@ class ReceiptParser:
                 if re.match(r'^\d+\.?\d*$', line):  # Just a number
                     continue
 
-                # Skip common receipt header words
-                skip_words = ['receipt', 'invoice', 'bill', 'order', 'tax']
-                if any(word in line.lower() for word in skip_words):
+                # Skip common receipt header words (but allow if part of company name)
+                skip_words = ['receipt', 'invoice', 'bill', 'order']
+                if line.lower() in skip_words:  # Only skip if it's JUST that word
                     continue
 
                 # This line likely contains the vendor name
@@ -137,6 +146,12 @@ class ReceiptParser:
 
         # Remove extra whitespace
         name = ' '.join(name.split())
+
+        # Limit to reasonable vendor name length (first 50 chars)
+        # This prevents grabbing too much text
+        words = name.split()
+        if len(words) > 6:  # Most vendor names are 1-6 words
+            name = ' '.join(words[:6])
 
         return name.strip()
 
@@ -250,6 +265,7 @@ class ReceiptParser:
             '%d/%m/%y', '%d-%m-%y',
             '%B %d, %Y', '%b %d, %Y',
             '%B %d %Y', '%b %d %Y',
+            '%B %d/%Y', '%b %d/%Y',  # April 9/2025
         ]
 
         for fmt in formats:
