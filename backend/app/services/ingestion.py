@@ -4,7 +4,7 @@ Processes emails, extracts attachments, and uploads to storage.
 """
 
 import uuid
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 
 from app.services.email import EmailService
