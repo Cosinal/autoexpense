@@ -50,10 +50,10 @@ class ReceiptParser:
             (2, r'\*\*(?:total|amount\s+due)\*\*[\s:]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})'),
             # Priority 2: Total with strong context
             (2, r'(?:^|\n|\|)\s*total[\s:]+[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 3: Amount followed by currency code
-            (3, r'(\d{1,3}(?:,\d{3})*\.\d{2})\s+(?:CAD|USD|EUR|GBP|AUD|NZD|CHF)'),
             # Priority 3: Generic total/amount (exclude subtotal)
-            (3, r'(?<!sub)(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            (3, r'(?<!sub)(?<!Sub)(?<!SUB)(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 4: Amount followed by currency code (lower priority to avoid matching item prices)
+            (4, r'(\d{1,3}(?:,\d{3})*\.\d{2})\s+(?:CAD|USD|EUR|GBP|AUD|NZD|CHF)'),
             # Priority 4: Currency symbol (last resort)
             (4, r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'),
             # Priority 4: € with spaces (European format)
@@ -86,11 +86,11 @@ class ReceiptParser:
         # IMPROVED: Tax patterns with pipe separator support
         self.tax_patterns = [
             # VAT (23%): € 643.77 - with percentage and currency
-            r'vat[\s:()%\d]*[$€£¥]?\s+(\d{1,3}(?:,\d{3})*\.\d{2})',
+            r'vat[\s:()%\d\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # Tax: $5.99, TAX 5.99, VAT: € 5.99
-            r'tax[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # Sales Tax, HST, GST with currency symbols
-            r'(?:sales tax|hst|gst)[\s:()%]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            r'tax[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # Sales Tax, HST, GST, PST with currency symbols and pipe separators
+            r'(?:sales tax|hst|gst|pst)[\s:()%\d\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # NEW: Pipe separator support (for "HST| $1.09")
             r'(?:hst|gst|tax|vat)\s*\|\s*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # NEW: HST/GST without colon (for "HST $1.09")
@@ -397,10 +397,14 @@ class ReceiptParser:
                     if 'subtotal' in preceding_text or 'subtotal' in following_text:
                         # Unless it says "grand total" or similar
                         if 'grand' not in preceding_text and 'grand' not in following_text:
-                            # Also check if there's a "total" label closer to this amount
-                            # If "total" appears within 50 chars, it might be the total line
-                            immediate_preceding = text[max(0, match.start() - 50):match.start()].lower()
-                            if 'total' in immediate_preceding and 'subtotal' not in immediate_preceding:
+                            # Also check if the MATCH ITSELF contains "total" keyword
+                            # (e.g., pattern matched "Total: $8.39")
+                            match_text = match.group(0).lower()
+                            if any(keyword in match_text for keyword in ['total', 'amount', 'paid', 'sum']):
+                                pass  # Keep this match, the pattern itself matched a total keyword
+                            # Or check if there's a "total" label closer to this amount
+                            elif 'total' in text[max(0, match.start() - 50):match.start()].lower() and \
+                                 'subtotal' not in text[max(0, match.start() - 50):match.start()].lower():
                                 pass  # Keep this match, it's likely the total
                             else:
                                 continue  # Skip it, it's a subtotal
@@ -447,6 +451,21 @@ class ReceiptParser:
         """
         try:
             text_upper = text.upper()
+
+            # Strategy 0: Check for Canadian indicators first
+            # Many Canadian receipts don't explicitly say CAD near the total
+            if 'CANADA' in text_upper or 'GST' in text_upper or 'PST' in text_upper:
+                # Look for explicit currency codes near transaction keywords
+                for keyword in ['TOTAL', 'AMOUNT', 'CHARGED', 'PAID']:
+                    keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
+                    for pos in keyword_positions:
+                        context = text_upper[pos:pos+100]
+                        # If we see USD explicitly near the total, it's USD
+                        if 'USD' in context:
+                            return 'USD'
+
+                # If Canadian indicators present but no USD near total, it's CAD
+                return 'CAD'
 
             # Strategy 1: Look for currency near "TOTAL" or "AMOUNT" keywords
             # This finds the currency actually used for the transaction
