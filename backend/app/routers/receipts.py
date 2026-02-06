@@ -9,8 +9,41 @@ import math
 
 from app.models.receipt import ReceiptResponse, ReceiptList
 from app.utils.supabase import get_supabase_client
+from app.services.storage import StorageService
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
+
+
+def generate_signed_url_for_receipt(receipt_data: dict) -> dict:
+    """
+    Generate signed URL for receipt file access.
+
+    Args:
+        receipt_data: Receipt dictionary from database
+
+    Returns:
+        Receipt data with signed URL
+    """
+    try:
+        storage = StorageService()
+
+        # Extract file path from public URL
+        file_url = receipt_data.get('file_url', '')
+        if file_url and 'public/receipts/' in file_url:
+            # Extract path after 'public/receipts/'
+            file_path = file_url.split('public/receipts/')[1]
+
+            # Generate signed URL (valid for 1 hour)
+            signed_url = storage.create_signed_url(file_path, expires_in=3600)
+
+            if signed_url:
+                receipt_data['file_url'] = signed_url
+
+    except Exception as e:
+        print(f"Error generating signed URL: {str(e)}")
+        # Keep original URL if signing fails
+
+    return receipt_data
 
 
 @router.get("", response_model=ReceiptList)
@@ -75,11 +108,17 @@ async def list_receipts(
         # Execute query
         response = query.execute()
 
+        # Generate signed URLs for all receipts
+        receipts_with_signed_urls = [
+            generate_signed_url_for_receipt(receipt)
+            for receipt in response.data
+        ]
+
         # Calculate pagination
         total_pages = math.ceil(total / page_size) if total > 0 else 1
 
         return ReceiptList(
-            receipts=response.data,
+            receipts=receipts_with_signed_urls,
             total=total,
             page=page,
             page_size=page_size,
@@ -115,7 +154,10 @@ async def get_receipt(receipt_id: str, user_id: str = Query(..., description="Us
         if not response.data:
             raise HTTPException(status_code=404, detail="Receipt not found")
 
-        return response.data[0]
+        # Generate signed URL for the receipt
+        receipt_data = generate_signed_url_for_receipt(response.data[0])
+
+        return receipt_data
 
     except HTTPException:
         raise

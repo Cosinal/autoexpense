@@ -10,8 +10,35 @@ import io
 import csv
 
 from app.utils.supabase import get_supabase_client
+from app.services.storage import StorageService
 
 router = APIRouter(prefix="/export", tags=["export"])
+
+
+def get_signed_url(file_url: str) -> str:
+    """
+    Convert public URL to signed URL for private bucket access.
+
+    Args:
+        file_url: Public URL from database
+
+    Returns:
+        Signed URL or original URL if conversion fails
+    """
+    try:
+        storage = StorageService()
+
+        if file_url and 'public/receipts/' in file_url:
+            file_path = file_url.split('public/receipts/')[1]
+            signed_url = storage.create_signed_url(file_path, expires_in=3600)
+
+            if signed_url:
+                return signed_url
+
+    except Exception as e:
+        print(f"Error generating signed URL: {str(e)}")
+
+    return file_url
 
 
 @router.get("/csv")
@@ -73,6 +100,9 @@ async def export_csv(
 
         # Write data
         for receipt in receipts:
+            # Generate signed URL for file access
+            file_url = get_signed_url(receipt.get('file_url', ''))
+
             writer.writerow([
                 receipt.get('date', ''),
                 receipt.get('vendor', ''),
@@ -80,7 +110,7 @@ async def export_csv(
                 receipt.get('currency', 'USD'),
                 receipt.get('tax', ''),
                 receipt.get('file_name', ''),
-                receipt.get('file_url', ''),
+                file_url,
                 receipt.get('id', '')
             ])
 

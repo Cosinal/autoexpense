@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import html2text
 
 from app.config import settings
 from app.utils.supabase import get_supabase_client
@@ -143,6 +144,72 @@ class EmailService:
 
         return attachments
 
+    def extract_email_body(self, message: Dict) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extract email body content (HTML and/or plain text).
+
+        Args:
+            message: Full Gmail message object
+
+        Returns:
+            Tuple of (html_body, text_body)
+        """
+        html_body = None
+        text_body = None
+
+        def get_body_from_part(part):
+            """Recursively extract body from message parts."""
+            nonlocal html_body, text_body
+
+            mime_type = part.get('mimeType', '')
+            body = part.get('body', {})
+
+            # Check if this part has the body data
+            if 'data' in body:
+                try:
+                    decoded = base64.urlsafe_b64decode(body['data']).decode('utf-8')
+
+                    if mime_type == 'text/html':
+                        html_body = decoded
+                    elif mime_type == 'text/plain':
+                        text_body = decoded
+                except Exception as e:
+                    print(f"Error decoding body part: {e}")
+
+            # Recursively process multipart messages
+            if 'parts' in part:
+                for subpart in part['parts']:
+                    get_body_from_part(subpart)
+
+        # Start extraction from payload
+        payload = message.get('payload', {})
+        get_body_from_part(payload)
+
+        return html_body, text_body
+
+    def convert_html_to_text(self, html_content: str) -> str:
+        """
+        Convert HTML email to clean text.
+
+        Args:
+            html_content: HTML string
+
+        Returns:
+            Plain text version
+        """
+        try:
+            h = html2text.HTML2Text()
+            h.ignore_links = False
+            h.ignore_images = True
+            h.ignore_emphasis = False
+            h.body_width = 0  # Don't wrap lines
+
+            text = h.handle(html_content)
+            return text
+        except Exception as e:
+            print(f"Error converting HTML to text: {e}")
+            return html_content
+
     def is_message_processed(self, message_id: str, user_id: str) -> bool:
         """
         Check if a message has already been processed.
@@ -237,6 +304,8 @@ class EmailService:
     ) -> List[Dict]:
         """
         Get messages that haven't been processed yet.
+        Includes both emails with attachments AND emails without attachments
+        (for processing email body as receipt).
 
         Args:
             user_id: Supabase user ID
@@ -246,10 +315,11 @@ class EmailService:
         Returns:
             List of unprocessed message objects
         """
-        # Get messages from last N days
+        # Get messages from last N days (no longer filtering by attachment)
+        # This allows processing of HTML receipt emails (Uber, Amazon, etc.)
         after_date = datetime.now() - timedelta(days=days_back)
         messages = self.list_messages(
-            query="has:attachment",  # Only get emails with attachments
+            query="",  # Get all emails, not just those with attachments
             max_results=max_results,
             after_date=after_date
         )

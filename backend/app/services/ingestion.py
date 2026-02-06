@@ -59,9 +59,42 @@ class IngestionService:
             attachments = self.email_service.extract_attachments(message)
 
             if not attachments:
-                print(f"No attachments found in message {message_id}")
+                print(f"No attachments found in message {message_id}, checking email body...")
+
+                # Try to process email body as receipt (Uber, Amazon, etc.)
+                try:
+                    html_body, text_body = self.email_service.extract_email_body(message)
+
+                    if html_body or text_body:
+                        # Convert HTML to text for processing
+                        body_text = html_body if html_body else text_body
+                        if html_body:
+                            body_text = self.email_service.convert_html_to_text(html_body)
+
+                        # Process the email body as a receipt
+                        receipt_id = self._process_email_body_as_receipt(
+                            user_id=user_id,
+                            message_id=message_id,
+                            body_text=body_text,
+                            metadata=metadata
+                        )
+
+                        if receipt_id:
+                            result['receipts_created'].append(receipt_id)
+                            result['attachments_processed'] = 1  # Count body as 1 "receipt"
+                            print(f"✓ Processed email body as receipt")
+                        else:
+                            print(f"Could not extract receipt data from email body")
+
+                except Exception as e:
+                    print(f"Error processing email body: {str(e)}")
+
                 # Still mark as processed to avoid re-checking
-                self.email_service.mark_message_processed(message_id, user_id, 0)
+                self.email_service.mark_message_processed(
+                    message_id,
+                    user_id,
+                    result['attachments_processed']
+                )
                 result['success'] = True
                 return result
 
@@ -211,6 +244,95 @@ class IngestionService:
         except Exception as e:
             print(f"  ✗ Error processing file: {str(e)}")
             return {}
+
+    def _process_email_body_as_receipt(
+        self,
+        user_id: str,
+        message_id: str,
+        body_text: str,
+        metadata: Dict
+    ) -> Optional[str]:
+        """
+        Process email body as a receipt (for HTML receipts like Uber, Amazon, etc.).
+
+        Args:
+            user_id: User UUID
+            message_id: Gmail message ID
+            body_text: Email body text (converted from HTML if needed)
+            metadata: Email metadata (subject, from, date, etc.)
+
+        Returns:
+            Receipt ID if successful, None otherwise
+        """
+        try:
+            print(f"  → Parsing email body as receipt...")
+
+            # Parse the email body text
+            parsed_data = self.parser.parse(body_text)
+
+            # If no useful data was extracted, skip
+            if not parsed_data.get('amount') and not parsed_data.get('vendor'):
+                print(f"  ⚠ No receipt data found in email body")
+                return None
+
+            # Try to extract vendor from email subject or sender if not found in body
+            if not parsed_data.get('vendor'):
+                # Try to get vendor from subject
+                subject = metadata.get('subject', '')
+                if subject:
+                    # Extract first few words from subject as vendor
+                    parsed_data['vendor'] = ' '.join(subject.split()[:5])
+                else:
+                    # Use sender email domain as vendor
+                    from_email = metadata.get('from', '')
+                    if '@' in from_email:
+                        domain = from_email.split('@')[1].split('.')[0]
+                        parsed_data['vendor'] = domain.capitalize()
+
+            # Store email body as a "file" in storage (as text)
+            # This allows users to reference the original email later
+            import uuid
+            receipt_id = str(uuid.uuid4())
+
+            # Create a text "file" from the email body
+            body_bytes = body_text.encode('utf-8')
+            filename = f"email_{message_id[:8]}.txt"
+
+            file_url, file_hash, file_path = self.storage_service.upload_receipt_file(
+                user_id=user_id,
+                filename=filename,
+                file_data=body_bytes,
+                mime_type='text/plain',
+                receipt_id=receipt_id
+            )
+
+            if not file_url:
+                print(f"  ⚠ Failed to store email body")
+                return None
+
+            # Log what we found
+            if parsed_data.get('vendor'):
+                print(f"  → Vendor: {parsed_data['vendor']}")
+            if parsed_data.get('amount'):
+                print(f"  → Amount: {parsed_data.get('currency', 'USD')} {parsed_data['amount']}")
+            if parsed_data.get('date'):
+                print(f"  → Date: {parsed_data['date']}")
+
+            # Create receipt record
+            receipt_id = self._create_receipt_record(
+                user_id=user_id,
+                file_url=file_url,
+                file_hash=file_hash,
+                file_name=filename,
+                mime_type='text/plain',
+                parsed_data=parsed_data
+            )
+
+            return receipt_id
+
+        except Exception as e:
+            print(f"  ✗ Error processing email body: {str(e)}")
+            return None
 
     def _create_receipt_record(
         self,
