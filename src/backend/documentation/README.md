@@ -28,13 +28,13 @@ uvicorn app.main:app --reload --port 8000
 
 Or use the run script:
 ```bash
-./run.sh
+./scripts/run.sh
 ```
 
 ## Project Structure
 
 ```
-backend/
+src/backend/
 ├── app/
 │   ├── main.py          # FastAPI app entry point
 │   ├── config.py        # Configuration & settings
@@ -45,8 +45,12 @@ backend/
 │   │   ├── ocr.py       # OCR processing
 │   │   └── parser.py    # Receipt parsing
 │   └── utils/           # Helper functions
-├── requirements.txt     # Python dependencies
-└── .env                 # Environment variables
+├── documentation/       # Documentation & guides
+│   └── archive/        # Archived analysis
+├── scripts/            # Utility & setup scripts
+├── tests/              # Test suite
+├── requirements.txt    # Python dependencies
+└── .env                # Environment variables
 ```
 
 ## API Endpoints

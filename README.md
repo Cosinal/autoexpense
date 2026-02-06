@@ -19,15 +19,27 @@ AutoExpense allows users to forward digital receipts to a dedicated email addres
 
 ```
 expense-reporting/
-├── backend/          # Python FastAPI backend
-├── frontend/         # Next.js frontend
-├── documents/        # Project documentation
-└── src/             # Shared utilities
+├── src/
+│   ├── backend/           # Python FastAPI backend
+│   │   ├── app/          # Core application code
+│   │   ├── documentation/ # Backend docs & archives
+│   │   ├── scripts/      # Utility & setup scripts
+│   │   └── tests/        # Test suite
+│   ├── frontend/          # Next.js frontend
+│   │   ├── app/          # Next.js app directory
+│   │   ├── documentation/ # Frontend docs
+│   │   ├── scripts/      # Build & utility scripts
+│   │   └── tests/        # Frontend tests
+│   └── database/          # Database migrations & setup
+│       └── migrations/    # SQL migration files
+└── documents/             # Project documentation
+    ├── build-plans/       # Development plans
+    └── archive/           # Archived docs
 ```
 
 ## Getting Started
 
-See individual README files in `/backend` and `/frontend` directories for setup instructions.
+See individual README files in `/src/backend` and `/src/frontend` directories for setup instructions.
 
 ## MVP Features
 

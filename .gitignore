@@ -4,44 +4,21 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-backend/lib/
-backend/lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 venv/
-ENV/
 env/
-.venv
+ENV/
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-.next/
-out/
-build/
-.DS_Store
-*.pem
+# Backend
+src/backend/.env
+src/backend/credentials.json
+src/backend/token.pickle
+src/backend/venv/
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Frontend
+src/frontend/.env.local
+src/frontend/.next/
+src/frontend/node_modules/
+src/frontend/out/
 
 # IDEs
 .vscode/
@@ -54,14 +31,12 @@ build/
 .DS_Store
 Thumbs.db
 
-# Supabase
-.supabase/
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-
 # Logs
 *.log
-logs/
+
+# Temporary files
+*.tmp
+*.temp
+reorganize.sh
+complete_frontend_move.sh
+complete_backend_cleanup.sh
