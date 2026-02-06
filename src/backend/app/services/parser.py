@@ -434,13 +434,10 @@ class ReceiptParser:
 
     def extract_currency(self, text: str) -> str:
         """
-        Extract currency from receipt.
+        Extract currency from receipt with context awareness.
 
-        Priority order:
-        1. Explicit currency codes (CAD, USD, etc.)
-        2. Canadian dollar prefix (C$)
-        3. Other currency symbols (€, £, ¥)
-        4. Generic $ (defaults to USD)
+        Looks for currency near 'Total' or 'Amount' to avoid picking
+        wrong currency when multiple currencies are shown.
 
         Args:
             text: Receipt text
@@ -451,17 +448,50 @@ class ReceiptParser:
         try:
             text_upper = text.upper()
 
-            # Priority 1: Check for explicit currency CODES first
-            # This catches "CAD", "USD", etc. before checking symbols
-            for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
-                if code in text_upper:
-                    return code
+            # Strategy 1: Look for currency near "TOTAL" or "AMOUNT" keywords
+            # This finds the currency actually used for the transaction
+            for keyword in ['TOTAL', 'AMOUNT', 'CHARGED', 'PAID']:
+                # Find all occurrences of the keyword
+                keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
 
-            # Priority 2: Check for C$ (Canadian dollar prefix)
+                for pos in keyword_positions:
+                    # Check 100 chars after the keyword for currency
+                    context = text_upper[pos:pos+100]
+
+                    # Check for currency codes in order of specificity
+                    for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
+                        if code in context:
+                            return code
+
+                    # Check for C$ prefix
+                    if 'C$' in text[pos:pos+100]:
+                        return 'CAD'
+
+                    # Check for Euro symbol
+                    if '€' in text[pos:pos+100]:
+                        return 'EUR'
+                    if '£' in text[pos:pos+100]:
+                        return 'GBP'
+                    if '¥' in text[pos:pos+100]:
+                        return 'JPY'
+
+            # Strategy 2: If no context match, count currency occurrences
+            # Use the currency that appears most frequently
+            currency_counts = {}
+            for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
+                count = text_upper.count(code)
+                if count > 0:
+                    currency_counts[code] = count
+
+            if currency_counts:
+                # Return the most frequent currency
+                return max(currency_counts, key=currency_counts.get)
+
+            # Strategy 3: Check for C$ prefix anywhere
             if 'C$' in text or 'C $' in text:
                 return 'CAD'
 
-            # Priority 3: Check for other currency symbols (not $)
+            # Strategy 4: Check for symbols
             if '€' in text:
                 return 'EUR'
             if '£' in text:
@@ -469,8 +499,7 @@ class ReceiptParser:
             if '¥' in text:
                 return 'JPY'
 
-            # Priority 4: If we see $ but no currency code, default to USD
-            # This is the fallback for receipts that don't specify currency
+            # Strategy 5: If we see $ but no currency code, default to USD
             if '$' in text:
                 return 'USD'
 
