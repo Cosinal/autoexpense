@@ -18,16 +18,25 @@ class ReceiptParser:
     def _init_patterns(self):
         """Initialize regex patterns for parsing."""
 
-        # Amount patterns
+        # IMPROVED: Priority-based amount patterns (lower number = higher priority)
         self.amount_patterns = [
-            # $99.99, $1,234.56, € 99.99, €99.99
-            r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',
-            # € 3,442.77 with spaces
-            r'€\s+(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # TOTAL: 99.99, Total 99.99, Total Paid 99.99
-            r'(?:total|amount|sum|paid)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # 99.99 at end of line (common in receipts)
-            r'(\d{1,3}(?:,\d{3})*\.\d{2})\s*$',
+            # Priority 1: Explicit payment indicators (highest confidence)
+            (1, r'(?:amount\s+paid|total\s+paid|grand\s+total|final\s+total)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 2: Total with strong context
+            (2, r'(?:^|\n|\|)\s*total[\s:]+[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 3: Generic total/amount
+            (3, r'(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 4: Currency symbol (last resort)
+            (4, r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'),
+            # Priority 4: € with spaces (European format)
+            (4, r'€\s+(\d{1,3}(?:,\d{3})*\.\d{2})'),
+        ]
+
+        # Blacklist contexts - amounts to ignore
+        self.blacklist_contexts = [
+            'liability', 'coverage', 'insurance', 'limit', 'maximum',
+            'up to', 'points', 'pts', 'booking reference', 'confirmation',
+            'reference', 'miles', 'rewards'
         ]
 
         # Date patterns
@@ -44,7 +53,7 @@ class ReceiptParser:
             r'(\d{4}-\d{2}-\d{2})',
         ]
 
-        # Tax patterns
+        # IMPROVED: Tax patterns with pipe separator support
         self.tax_patterns = [
             # VAT (23%): € 643.77 - with percentage and currency
             r'vat[\s:()%\d]*[$€£¥]?\s+(\d{1,3}(?:,\d{3})*\.\d{2})',
@@ -52,6 +61,16 @@ class ReceiptParser:
             r'tax[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # Sales Tax, HST, GST with currency symbols
             r'(?:sales tax|hst|gst)[\s:()%]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # NEW: Pipe separator support (for "HST| $1.09")
+            r'(?:hst|gst|tax|vat)\s*\|\s*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # NEW: HST/GST without colon (for "HST $1.09")
+            r'(?:hst|gst)\s+[$€£¥]\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+        ]
+
+        # Subtotal patterns
+        self.subtotal_patterns = [
+            r'(?:sub\s*total|subtotal)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            r'(?:trip\s+fare|fare)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
         ]
 
         # Currency symbols
@@ -93,7 +112,7 @@ class ReceiptParser:
     def extract_vendor(self, text: str) -> Optional[str]:
         """
         Extract vendor/merchant name from receipt text.
-        Usually the first line or most prominent text.
+        Works for both physical receipts and email receipts.
 
         Args:
             text: Receipt text
@@ -104,9 +123,68 @@ class ReceiptParser:
         try:
             lines = text.split('\n')
 
-            # Try to find vendor in first few lines
-            for line in lines[:5]:
+            # First, try to extract from email "From:" field if present
+            # Example: "From: **Uber Receipts** <noreply@uber.com>"
+            for line in lines[:15]:  # Check more lines for email headers
+                if line.strip().lower().startswith('from:'):
+                    # Extract name from "From: Name <email>"
+                    match = re.search(r'from:\s*\*?\*?([^<\*]+?)[\*\s]*(?:<|$)', line, re.IGNORECASE)
+                    if match:
+                        vendor = self._clean_vendor_name(match.group(1))
+                        if vendor and len(vendor) > 2:
+                            # Remove common email words
+                            vendor = re.sub(r'\b(receipts?|notifications?|noreply|no-reply)\b', '', vendor, flags=re.IGNORECASE).strip()
+                            if vendor and len(vendor) > 2:
+                                return vendor
+
+            # Known vendor patterns - detect common brands
+            known_vendors = {
+                r'\buber\b': 'Uber',
+                r'\bamazon\b': 'Amazon',
+                r'\bairbnb\b': 'Airbnb',
+                r'\blyft\b': 'Lyft',
+                r'\bdoordash\b': 'DoorDash',
+                r'\bgrubhub\b': 'Grubhub',
+                r'\bskip\s*the\s*dishes\b': 'Skip The Dishes',
+                r'\bair\s*canada\b': 'Air Canada',
+                r'\bwestjet\b': 'WestJet',
+                r'\bapple\b': 'Apple',
+                r'\bwalmart\b': 'Walmart',
+                r'\btarget\b': 'Target',
+                r'\bstarbucks\b': 'Starbucks',
+                r'\bmcdonald': 'McDonald\'s',
+            }
+
+            # Check for known vendors in the entire text
+            text_lower = text.lower()
+            for pattern, name in known_vendors.items():
+                if re.search(pattern, text_lower):
+                    return name
+
+            # Fallback: Try to find vendor in first few non-header lines
+            email_skip_patterns = [
+                r'^\s*[-=]+\s*forwarded\s+message\s*[-=]+',  # Forwarded message headers
+                r'^\s*from:\s*',  # Email from field
+                r'^\s*to:\s*',  # Email to field
+                r'^\s*date:\s*',  # Email date field
+                r'^\s*subject:\s*',  # Email subject field
+                r'^\s*sent:\s*',  # Email sent field
+                r'^\s*cc:\s*',  # Email cc field
+                r'^\s*\[?https?://',  # URLs
+                r'^\s*mailto:',  # Email links
+            ]
+
+            for line in lines[:20]:
                 line = line.strip()
+
+                # Skip email forwarding headers
+                skip_line = False
+                for pattern in email_skip_patterns:
+                    if re.match(pattern, line, re.IGNORECASE):
+                        skip_line = True
+                        break
+                if skip_line:
+                    continue
 
                 # Remove leading garbage characters
                 line = re.sub(r'^[^\w\s]+', '', line)
@@ -120,15 +198,17 @@ class ReceiptParser:
                     continue
 
                 # Skip common receipt header words (but allow if part of company name)
-                skip_words = ['receipt', 'invoice', 'bill', 'order']
+                skip_words = ['receipt', 'invoice', 'bill', 'order', 'thanks', 'thank you', 'trip', 'ride', 'booking']
                 if line.lower() in skip_words:  # Only skip if it's JUST that word
                     continue
 
                 # This line likely contains the vendor name
-                # Clean it up
                 vendor = self._clean_vendor_name(line)
                 if vendor and len(vendor) > 2:
-                    return vendor
+                    # Make sure it's not just generic words
+                    generic_phrases = ['your order', 'your trip', 'your receipt', 'your booking']
+                    if vendor.lower() not in generic_phrases:
+                        return vendor
 
             return None
 
@@ -157,7 +237,7 @@ class ReceiptParser:
 
     def extract_amount(self, text: str) -> Optional[Decimal]:
         """
-        Extract total amount from receipt.
+        Extract total amount from receipt using priority-based matching.
 
         Args:
             text: Receipt text
@@ -166,27 +246,43 @@ class ReceiptParser:
             Amount as Decimal or None
         """
         try:
-            amounts = []
+            # Try patterns in priority order (lower number = higher confidence)
+            for priority, pattern in self.amount_patterns:
+                matches = list(re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE))
 
-            # Try each pattern
-            for pattern in self.amount_patterns:
-                matches = re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE)
                 for match in matches:
+                    # Get narrow context window around the match (±50 chars)
+                    # This prevents false positives from unrelated blacklist terms elsewhere on the line
+                    context_start = max(0, match.start() - 50)
+                    context_end = min(len(text), match.end() + 50)
+                    context_window = text[context_start:context_end].lower()
+
+                    # Skip if in blacklisted context
+                    if any(bl in context_window for bl in self.blacklist_contexts):
+                        continue
+
                     amount_str = match.group(1) if match.groups() else match.group(0)
-                    # Remove commas and convert to decimal
-                    amount_str = amount_str.replace(',', '').replace('$', '').strip()
+                    amount_str = amount_str.replace(',', '').replace('$', '').replace('€', '').replace('£', '').replace('¥', '').strip()
+
                     try:
                         amount = Decimal(amount_str)
-                        if amount > 0:
-                            amounts.append(amount)
+
+                        # Sanity checks
+                        if amount <= 0:
+                            continue
+
+                        # Flag suspiciously large amounts from low-priority patterns
+                        if amount > 10000 and priority > 2:
+                            continue  # Skip large amounts from generic patterns
+
+                        # Found valid amount from this priority level
+                        return amount
+
                     except (InvalidOperation, ValueError):
                         continue
 
-            if not amounts:
-                return None
-
-            # Return the largest amount (usually the total)
-            return max(amounts)
+            # No amount found with any pattern
+            return None
 
         except Exception as e:
             print(f"Error extracting amount: {str(e)}")
