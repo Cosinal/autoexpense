@@ -22,8 +22,14 @@ class ReceiptParser:
         self.amount_patterns = [
             # Priority 1: Explicit payment indicators (highest confidence)
             (1, r'(?:amount\s+paid|total\s+paid|grand\s+total|final\s+total)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 2: Table format with pipe separator and currency code (Steam)
+            (2, r'(?:total|grand\s+total)[\s:*]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})\s*(?:CAD|USD|EUR|GBP|AUD)'),
+            # Priority 2: Markdown bold total with pipe
+            (2, r'\*\*(?:total|amount\s+due)\*\*[\s:]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})'),
             # Priority 2: Total with strong context
             (2, r'(?:^|\n|\|)\s*total[\s:]+[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 3: Amount followed by currency code
+            (3, r'(\d{1,3}(?:,\d{3})*\.\d{2})\s+(?:CAD|USD|EUR|GBP|AUD|NZD|CHF)'),
             # Priority 3: Generic total/amount
             (3, r'(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
             # Priority 4: Currency symbol (last resort)
@@ -109,6 +115,22 @@ class ReceiptParser:
 
         return result
 
+    def _normalize_ocr_spaces(self, text: str) -> str:
+        """
+        Remove OCR-induced extra spaces between characters.
+        Handles cases like "L o v a b l e" → "Lovable"
+        """
+        # Detect pattern: single chars with spaces
+        if re.search(r'[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]', text):
+            # Iteratively remove spaces between single characters
+            pattern = r'\b([A-Za-z])\s+(?=[A-Za-z](\s+|$))'
+            while True:
+                new_text = re.sub(pattern, r'\1', text)
+                if new_text == text:
+                    break
+                text = new_text
+        return text
+
     def extract_vendor(self, text: str) -> Optional[str]:
         """
         Extract vendor/merchant name from receipt text.
@@ -121,6 +143,8 @@ class ReceiptParser:
             Vendor name or None
         """
         try:
+            # Normalize OCR spacing issues
+            text = self._normalize_ocr_spaces(text)
             lines = text.split('\n')
 
             # First, try to extract from email "From:" field if present
@@ -161,6 +185,16 @@ class ReceiptParser:
                 if re.search(pattern, text_lower):
                     return name
 
+            # Prioritize lines with company indicators (Inc, LLC, etc.)
+            # Handle both spaced names and camelCase (e.g., "Lovable Labs Inc" or "LovableLabsIncorporated")
+            for line in lines[:30]:
+                match = re.search(r'([A-Z][a-zA-Z\s]{2,60}?(?:Incorporated|Inc|LLC|Ltd|Limited|Corp|Corporation|Labs))', line)
+                if match:
+                    # Extract just the company name portion
+                    vendor = self._clean_vendor_name(match.group(1))
+                    if vendor and len(vendor) > 5:
+                        return vendor
+
             # Fallback: Try to find vendor in first few non-header lines
             email_skip_patterns = [
                 r'^\s*[-=]+\s*forwarded\s+message\s*[-=]+',  # Forwarded message headers
@@ -172,6 +206,11 @@ class ReceiptParser:
                 r'^\s*cc:\s*',  # Email cc field
                 r'^\s*\[?https?://',  # URLs
                 r'^\s*mailto:',  # Email links
+                # PDF page headers (Lovable fix)
+                r'^\s*page\s+\d+',  # "page 1", "Page 1"
+                r'^\s*page\s+\d+\s+of\s+\d+',  # "page 1 of 1"
+                r'^\s*\d+\s+of\s+\d+',  # "1 of 1"
+                r'^\s*p\s*a\s*g\s*e\s+\d+',  # "P a g e  1" (OCR spaced)
             ]
 
             for line in lines[:20]:
@@ -259,6 +298,10 @@ class ReceiptParser:
 
                     # Skip if in blacklisted context
                     if any(bl in context_window for bl in self.blacklist_contexts):
+                        continue
+
+                    # Skip subtotals (prefer "Total" over "Subtotal")
+                    if 'subtotal' in context_window:
                         continue
 
                     amount_str = match.group(1) if match.groups() else match.group(0)
