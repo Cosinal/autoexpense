@@ -388,16 +388,22 @@ class ReceiptParser:
                         continue
 
                     # Skip subtotals (prefer "Total" over "Subtotal")
-                    # Check IMMEDIATE preceding text (on same line or very close)
-                    # Only check 20 chars before and after to ensure it's THIS amount's label
-                    immediate_preceding = text[max(0, match.start() - 20):match.start()].lower()
-                    immediate_following = text[match.end():min(len(text), match.end() + 10)].lower()
+                    # Check preceding context more broadly to catch subtotal labels
+                    # Check up to 150 chars before (covers multi-line formats)
+                    preceding_text = text[max(0, match.start() - 150):match.start()].lower()
+                    following_text = text[match.end():min(len(text), match.end() + 30)].lower()
 
                     # Skip if THIS amount is explicitly labeled as subtotal
-                    if 'subtotal' in immediate_preceding or 'subtotal' in immediate_following:
+                    if 'subtotal' in preceding_text or 'subtotal' in following_text:
                         # Unless it says "grand total" or similar
-                        if 'grand' not in immediate_preceding and 'grand' not in immediate_following:
-                            continue
+                        if 'grand' not in preceding_text and 'grand' not in following_text:
+                            # Also check if there's a "total" label closer to this amount
+                            # If "total" appears within 50 chars, it might be the total line
+                            immediate_preceding = text[max(0, match.start() - 50):match.start()].lower()
+                            if 'total' in immediate_preceding and 'subtotal' not in immediate_preceding:
+                                pass  # Keep this match, it's likely the total
+                            else:
+                                continue  # Skip it, it's a subtotal
 
                     amount_str = match.group(1) if match.groups() else match.group(0)
                     amount_str = amount_str.replace(',', '').replace('$', '').replace('€', '').replace('£', '').replace('¥', '').strip()
@@ -430,6 +436,12 @@ class ReceiptParser:
         """
         Extract currency from receipt.
 
+        Priority order:
+        1. Explicit currency codes (CAD, USD, etc.)
+        2. Canadian dollar prefix (C$)
+        3. Other currency symbols (€, £, ¥)
+        4. Generic $ (defaults to USD)
+
         Args:
             text: Receipt text
 
@@ -437,17 +449,32 @@ class ReceiptParser:
             Currency code (USD, EUR, etc.) or 'USD' as default
         """
         try:
-            # Check for currency symbols
-            for symbol, code in self.currency_map.items():
-                if symbol in text:
+            text_upper = text.upper()
+
+            # Priority 1: Check for explicit currency CODES first
+            # This catches "CAD", "USD", etc. before checking symbols
+            for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
+                if code in text_upper:
                     return code
 
-            # Check for currency codes
-            for code in ['USD', 'EUR', 'GBP', 'CAD', 'AUD']:
-                if code in text.upper():
-                    return code
+            # Priority 2: Check for C$ (Canadian dollar prefix)
+            if 'C$' in text or 'C $' in text:
+                return 'CAD'
 
-            # Default to USD
+            # Priority 3: Check for other currency symbols (not $)
+            if '€' in text:
+                return 'EUR'
+            if '£' in text:
+                return 'GBP'
+            if '¥' in text:
+                return 'JPY'
+
+            # Priority 4: If we see $ but no currency code, default to USD
+            # This is the fallback for receipts that don't specify currency
+            if '$' in text:
+                return 'USD'
+
+            # Final fallback
             return 'USD'
 
         except Exception as e:
