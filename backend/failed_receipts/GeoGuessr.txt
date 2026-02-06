@@ -1,0 +1,64 @@
+Tax invoice
+PAID
+23rd November 2025 - 
+CA$6.99
+via Paddle.com
+Invoice to
+Jorden Shaw
+maybejorden@gmail.com
+T2N 3K1
+Canada
+Invoice from
+Paddle.com Market Ltd
+Judd House 18-29 Mora Street
+London EC1V 8BT
+United Kingdom
+Payment method:
+- 1119
+Account Number:
+ 77195 0862 RT9999
+Company Number
+: 08172165
+Invoice details
+Invoice reference: 
+184-324336
+Billing period: 
+23rd November 2025 - 23rd December 2025
+Transaction: 
+txn_01kaq9caz559pe79s8h305hawf
+Currency code: 
+CAD
+Transaction
+Product
+Qty
+Unit price
+Tax rate
+Amount
+GeoGuessr Unlimited
+23rd November 2025 - 23rd December 2025
+1
+CA$6.66
+5%
+CA$6.66
+Subtotal
+CA$6.66
+Sales Tax
+CA$0.33
+Total
+CA$6.99
+Amount paid
+CA$6.99
+Tax breakdown
+Tax %
+Tax
+5%
+CA$0.33
+Tax total
+CA$0.33
+The 
+CA$6.99
+ payment will appear on your bank/card statement as:
+PADDLE.NET* GEOGUESSR
+If you have a problem with your order (e.g. don’t recognize the charge, suspect a fraudulent transaction, etc,) please visit paddle.net.
+Paddle.com Market Ltd, Judd House, 18-29 Mora Street, London EC1V 8BT.
+© 2025 Paddle. All rights reserved.

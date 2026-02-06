@@ -1,0 +1,177 @@
+================================================================================
+RECEIPT PARSER FAILURE ANALYSIS - EXECUTIVE SUMMARY
+================================================================================
+
+FILES CREATED:
+1. PARSER_FAILURE_ANALYSIS.md - Detailed analysis of all 5 failed receipts
+2. PARSER_FIXES_QUICK_REFERENCE.md - Ready-to-implement code snippets
+3. VISUAL_PATTERN_EXAMPLES.md - Visual examples of text patterns
+4. failed_receipts/ - Downloaded receipt files for reference
+
+LOCATION: /Users/jordanshaw/Desktop/expense-reporting/backend/
+
+================================================================================
+FAILURE BREAKDOWN
+================================================================================
+
+1. SEPHORA (email_19c33910.txt)
+   Problem: Missing multiple tax types (GST + HST)
+   Extracted: $59.52 total ✓, $0 tax ✗
+   Actual: $59.52 total ✓, $7.32 tax (GST $2.62 + HST $4.70)
+
+   Fix: Sum multiple tax lines instead of returning first match
+   Priority: HIGH (multi-tax is common in Canada)
+
+2. URBAN OUTFITTERS (email_19c33917.txt)
+   Problem: Extracted item price instead of order total
+   Extracted: $54.00 ✗ (item price), no tax
+   Actual: $93.79 total, $10.79 tax
+
+   Fix: Add high-priority "Order Summary" patterns with pipe separator
+   Priority: CRITICAL (wrong amount breaks everything)
+
+3. FLIGHTHUB (email_19c3391e.txt)
+   Problem: Two receipts in one email, only found one
+   Extracted: $2,290.97 (date Jan 13 2023)
+   Actual: Receipt 1: $2,290.97 (Nov 6 2022), Receipt 2: $1.90 (Jan 13 2023)
+
+   Fix: Detect "RECEIPT NUMBER" boundaries, split into multiple receipts
+   Priority: MEDIUM (less common but causes data loss)
+
+4. PSA CANADA (PDF)
+   Problems:
+   - Wrong vendor name (too verbose)
+   - Extracted subtotal instead of total
+
+   Extracted: "Invoice Collectors Universe Canada Invoice" ✗, $134.95 ✗
+   Actual: "PSA Canada", $153.84 total, $18.89 tax ✓
+
+   Fix:
+   - Email domain hints for vendor (psacanada@ → PSA Canada)
+   - Add "TOTAL CAD $" pattern
+   - Better subtotal filtering
+   Priority: HIGH (wrong amount + confusing vendor)
+
+5. GEOGUESSR (PDF)
+   Problems:
+   - Wrong vendor (payment processor instead of merchant)
+   - Missing tax
+   - Missing date
+
+   Extracted: "Market Ltd" ✗, $6.99 ✓, no tax, no date
+   Actual: "GeoGuessr", $6.99 ✓, $0.33 tax, Nov 23 2025
+
+   Fix:
+   - Detect payment processors (Paddle), extract real merchant
+   - Multi-line tax pattern
+   - Ordinal date support (23rd November 2025)
+   Priority: HIGH (multiple critical fields missing)
+
+================================================================================
+PATTERNS TO ADD
+================================================================================
+
+AMOUNT PATTERNS (Priority 1 - highest):
+  - Order summary with pipe: r'order\s+summary[\s\S]{0,200}?total:\s*\|...'
+  - Total with pipe: r'total:\s*\|\s*C\$\s*(\d+\.\d{2})'
+  - TOTAL CAD $ format: r'total\s+cad\s+\$\s*\$?\s*(\d+\.\d{2})'
+
+TAX PATTERNS:
+  - Country-prefix: r'(?:[A-Z\s]+\s+)?(?:gst|hst|pst)(?:/[A-Z]+)?\s*\(...'
+  - Pipe separator: r'tax:\s*\|\s*[A-Z]{0,2}\$?\s*(\d+\.\d{2})'
+  - Multi-line: r'sales\s+tax\s*\n\s*([A-Z]{2,3})?\$?\s*(\d+\.\d{2})'
+
+DATE PATTERNS:
+  - Ordinal dates: r'(\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]{3,9}\s+\d{4})'
+
+================================================================================
+LOGIC CHANGES REQUIRED
+================================================================================
+
+1. Multi-Tax Support (Sephora)
+   Change extract_tax() to:
+   - Find ALL tax matches (not just first)
+   - Sum all taxes
+   - Return total
+
+2. Better Subtotal Filtering (Urban Outfitters, PSA Canada)
+   Check PRECEDING text specifically for "SUBTOTAL" label
+   Don't match amounts labeled as subtotals
+
+3. Payment Processor Detection (GeoGuessr)
+   - Add PAYMENT_PROCESSORS dict
+   - Detect when vendor is Paddle/Stripe/etc
+   - Extract real merchant from product name or statement line
+
+4. Email Domain Hints (PSA Canada)
+   Check email addresses for company name hints
+   psacanada@collectors.com → "PSA Canada"
+
+5. Ordinal Date Parsing (GeoGuessr)
+   Strip ordinal suffixes before parsing
+   "23rd November 2025" → "23 November 2025"
+
+6. Multi-Receipt Detection (Flighthub) - OPTIONAL
+   Detect "RECEIPT NUMBER" patterns
+   Split into separate receipts
+   Create multiple database entries
+
+================================================================================
+IMPLEMENTATION ESTIMATE
+================================================================================
+
+Time Required: 4-6 hours total
+  - Regex additions: 30 minutes
+  - Logic changes: 2-3 hours
+  - Testing: 1-2 hours
+
+Files to Modify: 1 file only
+  - /Users/jordanshaw/Desktop/expense-reporting/backend/app/services/parser.py
+
+Implementation Order:
+  1. Urban Outfitters (CRITICAL - wrong amount)
+  2. Sephora (HIGH - multi-tax)
+  3. PSA Canada (HIGH - subtotal vs total)
+  4. GeoGuessr (HIGH - missing fields)
+  5. Flighthub (MEDIUM - multi-receipt architecture)
+
+================================================================================
+EXPECTED RESULTS AFTER FIXES
+================================================================================
+
+Sephora:        Tax $0 → $7.32 ✓
+Urban Outfitters: Amount $54.00 → $93.79 ✓, Tax $0 → $10.79 ✓
+Flighthub:      1 receipt → 2 receipts ✓
+PSA Canada:     Amount $134.95 → $153.84 ✓, Vendor improved ✓
+GeoGuessr:      Vendor fixed ✓, Tax $0 → $0.33 ✓, Date added ✓
+
+Total: 5/5 receipts fixed (100% success rate)
+
+================================================================================
+TESTING COMMANDS
+================================================================================
+
+After implementing fixes, run these tests:
+
+source venv/bin/activate
+
+# Test each receipt
+python test_receipt_batch.py
+
+# Or test individually:
+python -c "from app.services.parser import ReceiptParser; ..."
+
+See PARSER_FIXES_QUICK_REFERENCE.md for full test commands.
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review PARSER_FAILURE_ANALYSIS.md for detailed analysis
+2. Use PARSER_FIXES_QUICK_REFERENCE.md for implementation
+3. Reference VISUAL_PATTERN_EXAMPLES.md to understand patterns
+4. Modify app/services/parser.py with new patterns and logic
+5. Run test commands to verify fixes
+6. Check for regressions on previously working receipts
+
+================================================================================

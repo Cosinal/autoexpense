@@ -11,6 +11,17 @@ from decimal import Decimal, InvalidOperation
 class ReceiptParser:
     """Service for parsing receipt text and extracting structured data."""
 
+    # Known payment processors (value is the normalized name)
+    PAYMENT_PROCESSORS = {
+        'paddle.com market ltd': 'paddle',
+        'paddle.com': 'paddle',
+        'paddle': 'paddle',
+        'market ltd': 'paddle',  # GeoGuessr case
+        'stripe': 'stripe',
+        'square': 'square',
+        'paypal': 'paypal',
+    }
+
     def __init__(self):
         """Initialize parser with regex patterns."""
         self._init_patterns()
@@ -22,8 +33,19 @@ class ReceiptParser:
         self.amount_patterns = [
             # Priority 1: Explicit payment indicators (highest confidence)
             (1, r'(?:amount\s+paid|total\s+paid|grand\s+total|final\s+total)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 1: Markdown bold total (Sephora: **Total: $59.52**)
+            (1, r'\*\*total[\s:]+\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})\*\*'),
+            # Priority 1: Order Summary with pipe separator (Urban Outfitters)
+            # Use negative lookbehind to exclude "subtotal"
+            (1, r'(?:order\s+summary|payment\s+summary)[\s\S]{0,200}?(?<!sub)total:\s*\|\s*[A-Z]{0,2}\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 1: Total with pipe and C$ (Urban Outfitters: Total: | C$93.79)
+            # Use negative lookbehind to exclude "subtotal"
+            (1, r'(?<!sub)total:\s*\|\s*C\$\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 1: TOTAL CAD $ format (PSA Canada)
+            (1, r'total\s+cad\s+\$\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
             # Priority 2: Table format with pipe separator and currency code (Steam)
-            (2, r'(?:total|grand\s+total)[\s:*]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})\s*(?:CAD|USD|EUR|GBP|AUD)'),
+            # Use negative lookbehind to exclude "subtotal"
+            (2, r'(?<!sub)(?:total|grand\s+total)[\s:*]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})\s*(?:CAD|USD|EUR|GBP|AUD)'),
             # Priority 2: Markdown bold total with pipe
             (2, r'\*\*(?:total|amount\s+due)\*\*[\s:]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})'),
             # Priority 2: Total with strong context
@@ -57,6 +79,8 @@ class ReceiptParser:
             r'([A-Za-z]{3,9}\s+\d{1,2}/\d{4})',
             # YYYY-MM-DD (ISO format)
             r'(\d{4}-\d{2}-\d{2})',
+            # NEW: Ordinal dates (23rd November 2025) - GeoGuessr fix
+            r'(\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]{3,9}\s+\d{4})',
         ]
 
         # IMPROVED: Tax patterns with pipe separator support
@@ -71,6 +95,12 @@ class ReceiptParser:
             r'(?:hst|gst|tax|vat)\s*\|\s*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # NEW: HST/GST without colon (for "HST $1.09")
             r'(?:hst|gst)\s+[$€£¥]\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # NEW: Sephora fix - Country-prefix tax (CANADA GST/TPS (5%): $2.62)
+            r'(?:[A-Z\s]+\s+)?(?:gst|hst|pst)(?:/[A-Z]+)?\s*\([^\)]+\):\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # NEW: Urban Outfitters - Tax with pipe separator
+            r'tax:\s*\|\s*[A-Z]{0,2}\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # NEW: GeoGuessr - Multi-line tax (Sales Tax\n$0.33)
+            r'(?:sales\s+tax|tax\s+total)\s*\n\s*([A-Z]{2,3})?\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
         ]
 
         # Subtotal patterns
@@ -177,6 +207,8 @@ class ReceiptParser:
                 r'\btarget\b': 'Target',
                 r'\bstarbucks\b': 'Starbucks',
                 r'\bmcdonald': 'McDonald\'s',
+                r'\bpsa\s+submission\b': 'PSA Canada',
+                r'\bpsacanada@': 'PSA Canada',
             }
 
             # Check for known vendors in the entire text
@@ -193,6 +225,13 @@ class ReceiptParser:
                     # Extract just the company name portion
                     vendor = self._clean_vendor_name(match.group(1))
                     if vendor and len(vendor) > 5:
+                        # Check if this is a payment processor
+                        vendor_lower = vendor.lower()
+                        if vendor_lower in self.PAYMENT_PROCESSORS:
+                            real_merchant = self._extract_real_merchant(text)
+                            if real_merchant:
+                                print(f"  → Payment processor detected: {vendor} -> Real merchant: {real_merchant}")
+                                return real_merchant
                         return vendor
 
             # Fallback: Try to find vendor in first few non-header lines
@@ -247,6 +286,13 @@ class ReceiptParser:
                     # Make sure it's not just generic words
                     generic_phrases = ['your order', 'your trip', 'your receipt', 'your booking']
                     if vendor.lower() not in generic_phrases:
+                        # Check if this is a payment processor
+                        vendor_lower = vendor.lower()
+                        if vendor_lower in self.PAYMENT_PROCESSORS:
+                            real_merchant = self._extract_real_merchant(text)
+                            if real_merchant:
+                                print(f"  → Payment processor detected: {vendor} -> Real merchant: {real_merchant}")
+                                return real_merchant
                         return vendor
 
             return None
@@ -254,6 +300,47 @@ class ReceiptParser:
         except Exception as e:
             print(f"Error extracting vendor: {str(e)}")
             return None
+
+    def _extract_real_merchant(self, text: str) -> Optional[str]:
+        """
+        Extract actual merchant when vendor is a payment processor.
+
+        Args:
+            text: Receipt text
+
+        Returns:
+            Real merchant name or None
+        """
+        # Check bank statement line (e.g., "statement as: PADDLE.NET* GEOGUESSR")
+        # Look for "statement as:" followed by the actual statement text (on same or next line)
+        statement_match = re.search(
+            r'statement\s+as:\s*\n?\s*([A-Z][A-Z0-9\s\.\*]+?)(?:\n|$)',
+            text,
+            re.IGNORECASE | re.MULTILINE
+        )
+        if statement_match:
+            statement = statement_match.group(1).strip()
+            # Split on * or multiple spaces to get merchant name
+            parts = re.split(r'[\*\s]{2,}', statement)
+            # Return last part (usually the merchant)
+            for part in reversed(parts):
+                if len(part) > 2 and part.upper() not in ['NET', 'COM', 'INC', 'PADDLE']:
+                    return part.strip().title()
+
+        # Check for product name in invoice
+        product_match = re.search(
+            r'(?:Product|Description|Item)\s*\n\s*([A-Z][a-zA-Z\s]{2,30}?)(?:\s+(?:Unlimited|Subscription|Pro|Monthly|Annual|Premium)|$)',
+            text,
+            re.MULTILINE
+        )
+        if product_match:
+            product_name = product_match.group(1).strip()
+            # Clean up common suffixes
+            product_name = re.sub(r'\s+(Unlimited|Subscription|Pro|Monthly|Annual|Premium)$', '', product_name, flags=re.IGNORECASE)
+            if len(product_name) > 2:
+                return product_name
+
+        return None
 
     def _clean_vendor_name(self, name: str) -> str:
         """Clean and format vendor name."""
@@ -301,8 +388,16 @@ class ReceiptParser:
                         continue
 
                     # Skip subtotals (prefer "Total" over "Subtotal")
-                    if 'subtotal' in context_window:
-                        continue
+                    # Check IMMEDIATE preceding text (on same line or very close)
+                    # Only check 20 chars before and after to ensure it's THIS amount's label
+                    immediate_preceding = text[max(0, match.start() - 20):match.start()].lower()
+                    immediate_following = text[match.end():min(len(text), match.end() + 10)].lower()
+
+                    # Skip if THIS amount is explicitly labeled as subtotal
+                    if 'subtotal' in immediate_preceding or 'subtotal' in immediate_following:
+                        # Unless it says "grand total" or similar
+                        if 'grand' not in immediate_preceding and 'grand' not in immediate_following:
+                            continue
 
                     amount_str = match.group(1) if match.groups() else match.group(0)
                     amount_str = amount_str.replace(',', '').replace('$', '').replace('€', '').replace('£', '').replace('¥', '').strip()
@@ -395,6 +490,11 @@ class ReceiptParser:
         Returns:
             Date in YYYY-MM-DD format or None
         """
+        # Handle ordinal suffixes (1st, 2nd, 3rd, 23rd)
+        if re.search(r'\d+(?:st|nd|rd|th)', date_str):
+            # Remove ordinal suffix: "23rd November 2025" -> "23 November 2025"
+            date_str = re.sub(r'(\d+)(?:st|nd|rd|th)', r'\1', date_str)
+
         # Common date format patterns
         formats = [
             '%m/%d/%Y', '%m-%d-%Y',
@@ -404,6 +504,7 @@ class ReceiptParser:
             '%d/%m/%y', '%d-%m-%y',
             '%B %d, %Y', '%b %d, %Y',
             '%B %d %Y', '%b %d %Y',
+            '%d %B %Y', '%d %b %Y',  # 23 November 2025 (after stripping ordinal)
             '%B %d/%Y', '%b %d/%Y',  # April 9/2025
         ]
 
@@ -418,26 +519,42 @@ class ReceiptParser:
 
     def extract_tax(self, text: str) -> Optional[Decimal]:
         """
-        Extract tax amount from receipt.
+        Extract tax amount from receipt, summing multiple tax lines if present.
+        (e.g., Sephora has both GST and HST that should be summed)
 
         Args:
             text: Receipt text
 
         Returns:
-            Tax amount as Decimal or None
+            Total tax amount as Decimal or None
         """
         try:
+            taxes = []
+
             # Try each tax pattern
             for pattern in self.tax_patterns:
                 matches = re.findall(pattern, text, re.IGNORECASE)
                 for match in matches:
+                    # Handle tuple results from patterns with multiple groups
+                    if isinstance(match, tuple):
+                        match = match[-1]  # Take last group (the amount)
+
                     tax_str = match.replace(',', '').replace('$', '').strip()
                     try:
                         tax = Decimal(tax_str)
                         if tax > 0:
-                            return tax
+                            taxes.append(tax)
                     except (InvalidOperation, ValueError):
                         continue
+
+            # Deduplicate taxes (same amount matched multiple times in receipt)
+            # Use set to get unique values, then convert back to list
+            if taxes:
+                unique_taxes = list(set(taxes))
+                total_tax = sum(unique_taxes)
+                if len(unique_taxes) > 1:
+                    print(f"  → Found {len(unique_taxes)} unique tax line(s), total: ${total_tax}")
+                return total_tax
 
             return None
 
