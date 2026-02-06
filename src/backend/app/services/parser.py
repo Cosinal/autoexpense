@@ -52,8 +52,8 @@ class ReceiptParser:
             (2, r'(?:^|\n|\|)\s*total[\s:]+[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
             # Priority 3: Amount followed by currency code
             (3, r'(\d{1,3}(?:,\d{3})*\.\d{2})\s+(?:CAD|USD|EUR|GBP|AUD|NZD|CHF)'),
-            # Priority 3: Generic total/amount
-            (3, r'(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            # Priority 3: Generic total/amount (exclude subtotal)
+            (3, r'(?<!sub)(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
             # Priority 4: Currency symbol (last resort)
             (4, r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'),
             # Priority 4: € with spaces (European format)
