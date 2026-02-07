@@ -234,6 +234,8 @@ class IngestionService:
                 print(f"  → Vendor: {parsed_data['vendor']}")
             if parsed_data.get('amount'):
                 print(f"  → Amount: {parsed_data['currency']} {parsed_data['amount']}")
+            if parsed_data.get('tax'):
+                print(f"  → Tax: {parsed_data['tax']}")
             if parsed_data.get('date'):
                 print(f"  → Date: {parsed_data['date']}")
 

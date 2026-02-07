@@ -102,9 +102,10 @@ class ReceiptParser:
             # NEW: GeoGuessr - Multi-line tax (Sales Tax\n$0.33)
             r'(?:sales\s+tax|tax\s+total)\s*\n\s*([A-Z]{2,3})?\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
             # NEW: LinkedIn - GST/HST/PST with percentage, then multi-line amount
-            # Matches: "GST : 5%\n...\nCA$1.19" (skips subtotal, captures GST amount)
+            # Matches: "GST : 5% ... CA $ 1.19" (skips subtotal, captures GST amount)
             # Pattern skips first amount (subtotal) and captures second amount (tax)
-            r'(?:gst|hst|pst)[\s:]*\d+%[\s\S]*?(?:[A-Z]{2,3})?\$\d{1,3}(?:,\d{3})*\.\d{2}[\s\S]{0,50}?([A-Z]{2,3})?\$(\d{1,3}(?:,\d{3})*\.\d{2})',
+            # Handles both "CA$1.19" and "CA $ 1.19" (with spaces from normalization)
+            r'(?:gst|hst|pst)[\s:]*\d+%[\s\S]*?(?:[A-Z]{2,3})?\s*\$\s*\d{1,3}(?:,\d{3})*\.\d{2}[\s\S]{0,50}?([A-Z]{2,3})?\s*\$\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
         ]
 
         # Subtotal patterns
