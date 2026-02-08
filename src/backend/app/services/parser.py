@@ -3,9 +3,28 @@ Receipt parser service for extracting structured data from OCR text.
 """
 
 import re
+import logging
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PatternSpec:
+    """A named regex pattern with example and notes for documentation."""
+    name: str
+    pattern: str
+    example: str
+    notes: Optional[str] = None
+    priority: Optional[int] = None
+    flags: int = re.IGNORECASE
+    compiled: re.Pattern = field(default=None, init=False, compare=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, 'compiled', re.compile(self.pattern, self.flags))
 
 
 class ReceiptParser:
@@ -31,33 +50,102 @@ class ReceiptParser:
 
         # IMPROVED: Priority-based amount patterns (lower number = higher priority)
         self.amount_patterns = [
-            # Priority 1: Explicit payment indicators (highest confidence)
-            (1, r'(?:amount\s+paid|total\s+paid|grand\s+total|final\s+total)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 1: Markdown bold total (Sephora: **Total: $59.52**)
-            (1, r'\*\*total[\s:]+\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})\*\*'),
-            # Priority 1: Order Summary with pipe separator (Urban Outfitters)
-            # Use negative lookbehind to exclude "subtotal"
-            (1, r'(?:order\s+summary|payment\s+summary)[\s\S]{0,200}?(?<!sub)total:\s*\|\s*[A-Z]{0,2}\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 1: Total with pipe and C$ (Urban Outfitters: Total: | C$93.79)
-            # Use negative lookbehind to exclude "subtotal"
-            (1, r'(?<!sub)total:\s*\|\s*C\$\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 1: TOTAL CAD $ format (PSA Canada)
-            (1, r'total\s+cad\s+\$\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 2: Table format with pipe separator and currency code (Steam)
-            # Use negative lookbehind to exclude "subtotal"
-            (2, r'(?<!sub)(?:total|grand\s+total)[\s:*]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})\s*(?:CAD|USD|EUR|GBP|AUD)'),
-            # Priority 2: Markdown bold total with pipe
-            (2, r'\*\*(?:total|amount\s+due)\*\*[\s:]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})'),
-            # Priority 2: Total with strong context
-            (2, r'(?:^|\n|\|)\s*total[\s:]+[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 3: Generic total/amount (exclude subtotal)
-            (3, r'(?<!sub)(?<!Sub)(?<!SUB)(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})'),
-            # Priority 4: Amount followed by currency code (lower priority to avoid matching item prices)
-            (4, r'(\d{1,3}(?:,\d{3})*\.\d{2})\s+(?:CAD|USD|EUR|GBP|AUD|NZD|CHF)'),
-            # Priority 4: Currency symbol (last resort)
-            (4, r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'),
-            # Priority 4: € with spaces (European format)
-            (4, r'€\s+(\d{1,3}(?:,\d{3})*\.\d{2})'),
+            PatternSpec(
+                name='explicit_payment',
+                pattern=r'(?:amount\s+paid|total\s+paid|grand\s+total|final\s+total)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Amount Paid: $59.52',
+                notes='Explicit payment indicators (highest confidence)',
+                priority=1,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='markdown_bold_total',
+                pattern=r'\*\*total[\s:]+\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})\*\*',
+                example='**Total: $59.52**',
+                notes='Markdown bold total (Sephora)',
+                priority=1,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='order_summary_pipe',
+                pattern=r'(?:order\s+summary|payment\s+summary)[\s\S]{0,200}?(?<!sub)total:\s*\|\s*[A-Z]{0,2}\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Order Summary ... Total: | C$93.79',
+                notes='Order Summary with pipe separator (Urban Outfitters)',
+                priority=1,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='total_pipe_cad',
+                pattern=r'(?<!sub)total:\s*\|\s*C\$\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Total: | C$93.79',
+                notes='Total with pipe and C$ (Urban Outfitters)',
+                priority=1,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='total_cad_format',
+                pattern=r'total\s+cad\s+\$\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='TOTAL CAD $ 153.84',
+                notes='TOTAL CAD $ format (PSA Canada)',
+                priority=1,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='table_pipe_currency',
+                pattern=r'(?<!sub)(?:total|grand\s+total)[\s:*]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})\s*(?:CAD|USD|EUR|GBP|AUD)',
+                example='Total | 6.99 CAD',
+                notes='Table format with pipe separator and currency code (Steam)',
+                priority=2,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='markdown_bold_pipe',
+                pattern=r'\*\*(?:total|amount\s+due)\*\*[\s:]*\|\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})',
+                example='**Total** | 59.52',
+                notes='Markdown bold total with pipe',
+                priority=2,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='total_strong_context',
+                pattern=r'(?:^|\n|\|)\s*total[\s:]+[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Total: $59.52',
+                notes='Total with strong context',
+                priority=2,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='generic_total',
+                pattern=r'(?<!sub)(?<!Sub)(?<!SUB)(?:total|amount|sum|paid)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Total $59.52',
+                notes='Generic total/amount (exclude subtotal)',
+                priority=3,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='amount_currency_code',
+                pattern=r'(\d{1,3}(?:,\d{3})*\.\d{2})\s+(?:CAD|USD|EUR|GBP|AUD|NZD|CHF)',
+                example='59.52 CAD',
+                notes='Amount followed by currency code (lower priority)',
+                priority=4,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='currency_symbol',
+                pattern=r'[$€£¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',
+                example='$59.52',
+                notes='Currency symbol (last resort)',
+                priority=4,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
+            PatternSpec(
+                name='euro_spaced',
+                pattern=r'€\s+(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='€ 59.52',
+                notes='Euro with spaces (European format)',
+                priority=4,
+                flags=re.IGNORECASE | re.MULTILINE,
+            ),
         ]
 
         # Blacklist contexts - amounts to ignore
@@ -69,49 +157,140 @@ class ReceiptParser:
 
         # Date patterns
         self.date_patterns = [
-            # MM/DD/YYYY or MM-DD-YYYY
-            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-            # DD/MM/YYYY or DD-MM-YYYY
-            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-            # Month DD, YYYY (Jan 15, 2024)
-            r'([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})',
-            # Month DD/YYYY (April 9/2025)
-            r'([A-Za-z]{3,9}\s+\d{1,2}/\d{4})',
-            # YYYY-MM-DD (ISO format)
-            r'(\d{4}-\d{2}-\d{2})',
-            # NEW: Ordinal dates (23rd November 2025) - GeoGuessr fix
-            r'(\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]{3,9}\s+\d{4})',
+            PatternSpec(
+                name='numeric_date_ambiguous',
+                pattern=r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
+                example='01/15/2024',
+                notes='MM/DD/YYYY or DD/MM/YYYY — resolved by locale detection',
+            ),
+            PatternSpec(
+                name='month_name_date',
+                pattern=r'([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})',
+                example='Jan 15, 2024',
+            ),
+            PatternSpec(
+                name='month_slash_date',
+                pattern=r'([A-Za-z]{3,9}\s+\d{1,2}/\d{4})',
+                example='April 9/2025',
+            ),
+            PatternSpec(
+                name='iso_date',
+                pattern=r'(\d{4}-\d{2}-\d{2})',
+                example='2024-01-15',
+            ),
+            PatternSpec(
+                name='ordinal_date',
+                pattern=r'(\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]{3,9}\s+\d{4})',
+                example='23rd November 2025',
+                notes='Ordinal dates (GeoGuessr fix)',
+            ),
         ]
 
         # IMPROVED: Tax patterns with pipe separator support
+        # Note: "Tax total" and "Tax breakdown" lines are summary re-statements,
+        # not additional tax lines — only patterns that match primary tax labels.
         self.tax_patterns = [
-            # VAT (23%): € 643.77 - with percentage and currency
-            r'vat[\s:()%\d\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # Tax: $5.99, TAX 5.99, VAT: € 5.99
-            r'tax[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # Sales Tax, HST, GST, PST with currency symbols and pipe separators
-            r'(?:sales tax|hst|gst|pst)[\s:()%\d\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # NEW: Pipe separator support (for "HST| $1.09")
-            r'(?:hst|gst|tax|vat)\s*\|\s*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # NEW: HST/GST without colon (for "HST $1.09")
-            r'(?:hst|gst)\s+[$€£¥]\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # NEW: Sephora fix - Country-prefix tax (CANADA GST/TPS (5%): $2.62)
-            r'(?:[A-Z\s]+\s+)?(?:gst|hst|pst)(?:/[A-Z]+)?\s*\([^\)]+\):\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # NEW: Urban Outfitters - Tax with pipe separator
-            r'tax:\s*\|\s*[A-Z]{0,2}\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # NEW: GeoGuessr - Multi-line tax (Sales Tax\n$0.33)
-            r'(?:sales\s+tax|tax\s+total)\s*\n\s*([A-Z]{2,3})?\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            # NEW: LinkedIn - GST/HST/PST with percentage, then multi-line amount
-            # Matches: "GST : 5% ... CA $ 1.19" (skips subtotal, captures GST amount)
-            # Pattern skips first amount (subtotal) and captures second amount (tax)
-            # Handles both "CA$1.19" and "CA $ 1.19" (with spaces from normalization)
-            r'(?:gst|hst|pst)[\s:]*\d+%[\s\S]*?(?:[A-Z]{2,3})?\s*\$\s*\d{1,3}(?:,\d{3})*\.\d{2}[\s\S]{0,50}?([A-Z]{2,3})?\s*\$\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            PatternSpec(
+                name='vat_with_percent',
+                pattern=r'vat[\s:()%\d\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='VAT (23%): € 643.77',
+            ),
+            PatternSpec(
+                name='tax_generic',
+                pattern=r'tax[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Tax: $5.99',
+            ),
+            PatternSpec(
+                name='sales_tax_hst_gst',
+                pattern=r'(?:sales tax|hst|gst|pst)[\s:()%\d\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='HST: $1.09',
+            ),
+            PatternSpec(
+                name='tax_pipe_separator',
+                pattern=r'(?:hst|gst|tax|vat)\s*\|\s*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='HST| $1.09',
+                notes='Pipe separator support',
+            ),
+            PatternSpec(
+                name='hst_gst_no_colon',
+                pattern=r'(?:hst|gst)\s+[$€£¥]\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='HST $1.09',
+            ),
+            PatternSpec(
+                name='country_prefix_tax',
+                pattern=r'(?:[A-Z\s]+\s+)?(?:gst|hst|pst)(?:/[A-Z]+)?\s*\([^\)]+\):\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='CANADA GST/TPS (5%): $2.62',
+                notes='Sephora fix - country-prefix tax',
+            ),
+            PatternSpec(
+                name='tax_pipe_urban',
+                pattern=r'tax:\s*\|\s*[A-Z]{0,2}\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Tax: | C$10.79',
+                notes='Urban Outfitters - tax with pipe separator',
+            ),
+            PatternSpec(
+                name='sales_tax_multiline',
+                pattern=r'sales\s+tax\s*\n\s*([A-Z]{2,3})?\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Sales Tax\n$0.33',
+                notes='GeoGuessr - multi-line sales tax (excludes "Tax total" summary lines)',
+            ),
+            PatternSpec(
+                name='linkedin_gst',
+                pattern=r'(?:gst|hst|pst)[\s:]*\d+%[\s\S]*?(?:[A-Z]{2,3})?\s*\$\s*\d{1,3}(?:,\d{3})*\.\d{2}[\s\S]{0,50}?([A-Z]{2,3})?\s*\$\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='GST : 5% ... CA $ 1.19 ... CA $ 1.19',
+                notes='LinkedIn - GST/HST/PST with percentage, multi-line amount',
+            ),
         ]
 
         # Subtotal patterns
         self.subtotal_patterns = [
-            r'(?:sub\s*total|subtotal)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-            r'(?:trip\s+fare|fare)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            PatternSpec(
+                name='subtotal',
+                pattern=r'(?:sub\s*total|subtotal)[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Subtotal: $50.00',
+            ),
+            PatternSpec(
+                name='trip_fare',
+                pattern=r'(?:trip\s+fare|fare)[\s:\|]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='Trip Fare: $10.00',
+            ),
+        ]
+
+        # Known vendor patterns (pre-compiled)
+        self.known_vendor_patterns = [
+            (re.compile(r'\buber\b', re.IGNORECASE), 'Uber'),
+            (re.compile(r'\bamazon\b', re.IGNORECASE), 'Amazon'),
+            (re.compile(r'\bairbnb\b', re.IGNORECASE), 'Airbnb'),
+            (re.compile(r'\blyft\b', re.IGNORECASE), 'Lyft'),
+            (re.compile(r'\bdoordash\b', re.IGNORECASE), 'DoorDash'),
+            (re.compile(r'\bgrubhub\b', re.IGNORECASE), 'Grubhub'),
+            (re.compile(r'\bskip\s*the\s*dishes\b', re.IGNORECASE), 'Skip The Dishes'),
+            (re.compile(r'\bair\s*canada\b', re.IGNORECASE), 'Air Canada'),
+            (re.compile(r'\bwestjet\b', re.IGNORECASE), 'WestJet'),
+            (re.compile(r'\bapple\b', re.IGNORECASE), 'Apple'),
+            (re.compile(r'\bwalmart\b', re.IGNORECASE), 'Walmart'),
+            (re.compile(r'\btarget\b', re.IGNORECASE), 'Target'),
+            (re.compile(r'\bstarbucks\b', re.IGNORECASE), 'Starbucks'),
+            (re.compile(r'\bmcdonald', re.IGNORECASE), "McDonald's"),
+            (re.compile(r'\bpsa\s+submission\b', re.IGNORECASE), 'PSA Canada'),
+            (re.compile(r'\bpsacanada@', re.IGNORECASE), 'PSA Canada'),
+        ]
+
+        # Email skip patterns (pre-compiled)
+        self.email_skip_patterns = [
+            re.compile(r'^\s*[-=]+\s*forwarded\s+message\s*[-=]+', re.IGNORECASE),
+            re.compile(r'^\s*from:\s*', re.IGNORECASE),
+            re.compile(r'^\s*to:\s*', re.IGNORECASE),
+            re.compile(r'^\s*date:\s*', re.IGNORECASE),
+            re.compile(r'^\s*subject:\s*', re.IGNORECASE),
+            re.compile(r'^\s*sent:\s*', re.IGNORECASE),
+            re.compile(r'^\s*cc:\s*', re.IGNORECASE),
+            re.compile(r'^\s*\[?https?://', re.IGNORECASE),
+            re.compile(r'^\s*mailto:', re.IGNORECASE),
+            re.compile(r'^\s*page\s+\d+', re.IGNORECASE),
+            re.compile(r'^\s*page\s+\d+\s+of\s+\d+', re.IGNORECASE),
+            re.compile(r'^\s*\d+\s+of\s+\d+', re.IGNORECASE),
+            re.compile(r'^\s*p\s*a\s*g\s*e\s+\d+', re.IGNORECASE),
         ]
 
         # Currency symbols
@@ -136,16 +315,17 @@ class ReceiptParser:
         Returns:
             Dictionary with parsed fields
         """
+        debug = {'patterns_matched': {}, 'confidence_per_field': {}, 'warnings': []}
         result = {
-            'vendor': self.extract_vendor(text),
-            'amount': self.extract_amount(text),
-            'currency': self.extract_currency(text),
-            'date': self.extract_date(text),
-            'tax': self.extract_tax(text),
-            'confidence': 0.0,  # Placeholder for confidence scoring
+            'vendor': self.extract_vendor(text, _debug=debug),
+            'amount': self.extract_amount(text, _debug=debug),
+            'currency': self.extract_currency(text, _debug=debug),
+            'date': self.extract_date(text, _debug=debug),
+            'tax': self.extract_tax(text, _debug=debug),
+            'confidence': 0.0,
+            'debug': debug,
         }
 
-        # Calculate rough confidence score
         result['confidence'] = self._calculate_confidence(result)
 
         return result
@@ -155,9 +335,7 @@ class ReceiptParser:
         Remove OCR-induced extra spaces between characters.
         Handles cases like "L o v a b l e" → "Lovable"
         """
-        # Detect pattern: single chars with spaces
         if re.search(r'[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]', text):
-            # Iteratively remove spaces between single characters
             pattern = r'\b([A-Za-z])\s+(?=[A-Za-z](\s+|$))'
             while True:
                 new_text = re.sub(pattern, r'\1', text)
@@ -166,7 +344,7 @@ class ReceiptParser:
                 text = new_text
         return text
 
-    def extract_vendor(self, text: str) -> Optional[str]:
+    def extract_vendor(self, text: str, _debug=None) -> Optional[str]:
         """
         Extract vendor/merchant name from receipt text.
         Works for both physical receipts and email receipts.
@@ -178,92 +356,63 @@ class ReceiptParser:
             Vendor name or None
         """
         try:
-            # Normalize OCR spacing issues
-            text = self._normalize_ocr_spaces(text)
+            # Normalize OCR spacing for header lines only
+            lines = text.split('\n')
+            header_lines = lines[:15]
+            normalized_header = '\n'.join(self._normalize_ocr_spaces(line) for line in header_lines)
+            text = normalized_header + ('\n' + '\n'.join(lines[15:]) if len(lines) > 15 else '')
             lines = text.split('\n')
 
             # First, try to extract from email "From:" field if present
-            # Example: "From: **Uber Receipts** <noreply@uber.com>"
-            for line in lines[:15]:  # Check more lines for email headers
+            for line in lines[:15]:
                 if line.strip().lower().startswith('from:'):
-                    # Extract name from "From: Name <email>"
                     match = re.search(r'from:\s*\*?\*?([^<\*]+?)[\*\s]*(?:<|$)', line, re.IGNORECASE)
                     if match:
                         vendor = self._clean_vendor_name(match.group(1))
                         if vendor and len(vendor) > 2:
-                            # Remove common email words
                             vendor = re.sub(r'\b(receipts?|notifications?|noreply|no-reply)\b', '', vendor, flags=re.IGNORECASE).strip()
                             if vendor and len(vendor) > 2:
+                                if _debug is not None:
+                                    _debug['patterns_matched']['vendor'] = 'from_header'
+                                    _debug['confidence_per_field']['vendor'] = 0.9
                                 return vendor
 
-            # Known vendor patterns - detect common brands
-            known_vendors = {
-                r'\buber\b': 'Uber',
-                r'\bamazon\b': 'Amazon',
-                r'\bairbnb\b': 'Airbnb',
-                r'\blyft\b': 'Lyft',
-                r'\bdoordash\b': 'DoorDash',
-                r'\bgrubhub\b': 'Grubhub',
-                r'\bskip\s*the\s*dishes\b': 'Skip The Dishes',
-                r'\bair\s*canada\b': 'Air Canada',
-                r'\bwestjet\b': 'WestJet',
-                r'\bapple\b': 'Apple',
-                r'\bwalmart\b': 'Walmart',
-                r'\btarget\b': 'Target',
-                r'\bstarbucks\b': 'Starbucks',
-                r'\bmcdonald': 'McDonald\'s',
-                r'\bpsa\s+submission\b': 'PSA Canada',
-                r'\bpsacanada@': 'PSA Canada',
-            }
-
             # Check for known vendors in the entire text
-            text_lower = text.lower()
-            for pattern, name in known_vendors.items():
-                if re.search(pattern, text_lower):
+            for compiled, name in self.known_vendor_patterns:
+                if compiled.search(text):
+                    if _debug is not None:
+                        _debug['patterns_matched']['vendor'] = f'known_vendor:{name}'
+                        _debug['confidence_per_field']['vendor'] = 0.95
                     return name
 
             # Prioritize lines with company indicators (Inc, LLC, etc.)
-            # Handle both spaced names and camelCase (e.g., "Lovable Labs Inc" or "LovableLabsIncorporated")
             for line in lines[:30]:
                 match = re.search(r'([A-Z][a-zA-Z\s]{2,60}?(?:Incorporated|Inc|LLC|Ltd|Limited|Corp|Corporation|Labs))', line)
                 if match:
-                    # Extract just the company name portion
                     vendor = self._clean_vendor_name(match.group(1))
                     if vendor and len(vendor) > 5:
-                        # Check if this is a payment processor
                         vendor_lower = vendor.lower()
                         if vendor_lower in self.PAYMENT_PROCESSORS:
                             real_merchant = self._extract_real_merchant(text)
                             if real_merchant:
-                                print(f"  → Payment processor detected: {vendor} -> Real merchant: {real_merchant}")
+                                logger.debug("Payment processor detected: %s -> %s", vendor, real_merchant)
+                                if _debug is not None:
+                                    _debug['patterns_matched']['vendor'] = 'payment_processor_real_merchant'
+                                    _debug['confidence_per_field']['vendor'] = 0.8
                                 return real_merchant
+                        if _debug is not None:
+                            _debug['patterns_matched']['vendor'] = 'company_indicator'
+                            _debug['confidence_per_field']['vendor'] = 0.85
                         return vendor
 
             # Fallback: Try to find vendor in first few non-header lines
-            email_skip_patterns = [
-                r'^\s*[-=]+\s*forwarded\s+message\s*[-=]+',  # Forwarded message headers
-                r'^\s*from:\s*',  # Email from field
-                r'^\s*to:\s*',  # Email to field
-                r'^\s*date:\s*',  # Email date field
-                r'^\s*subject:\s*',  # Email subject field
-                r'^\s*sent:\s*',  # Email sent field
-                r'^\s*cc:\s*',  # Email cc field
-                r'^\s*\[?https?://',  # URLs
-                r'^\s*mailto:',  # Email links
-                # PDF page headers (Lovable fix)
-                r'^\s*page\s+\d+',  # "page 1", "Page 1"
-                r'^\s*page\s+\d+\s+of\s+\d+',  # "page 1 of 1"
-                r'^\s*\d+\s+of\s+\d+',  # "1 of 1"
-                r'^\s*p\s*a\s*g\s*e\s+\d+',  # "P a g e  1" (OCR spaced)
-            ]
-
             for line in lines[:20]:
                 line = line.strip()
 
                 # Skip email forwarding headers
                 skip_line = False
-                for pattern in email_skip_patterns:
-                    if re.match(pattern, line, re.IGNORECASE):
+                for pattern in self.email_skip_patterns:
+                    if pattern.match(line):
                         skip_line = True
                         break
                 if skip_line:
@@ -272,38 +421,39 @@ class ReceiptParser:
                 # Remove leading garbage characters
                 line = re.sub(r'^[^\w\s]+', '', line)
 
-                # Skip empty lines, dates, and numbers
                 if not line or len(line) < 3:
                     continue
-                if re.match(r'^\d{1,2}[/-]\d{1,2}', line):  # Looks like a date
+                if re.match(r'^\d{1,2}[/-]\d{1,2}', line):
                     continue
-                if re.match(r'^\d+\.?\d*$', line):  # Just a number
+                if re.match(r'^\d+\.?\d*$', line):
                     continue
 
-                # Skip common receipt header words (but allow if part of company name)
                 skip_words = ['receipt', 'invoice', 'bill', 'order', 'thanks', 'thank you', 'trip', 'ride', 'booking']
-                if line.lower() in skip_words:  # Only skip if it's JUST that word
+                if line.lower() in skip_words:
                     continue
 
-                # This line likely contains the vendor name
                 vendor = self._clean_vendor_name(line)
                 if vendor and len(vendor) > 2:
-                    # Make sure it's not just generic words
                     generic_phrases = ['your order', 'your trip', 'your receipt', 'your booking']
                     if vendor.lower() not in generic_phrases:
-                        # Check if this is a payment processor
                         vendor_lower = vendor.lower()
                         if vendor_lower in self.PAYMENT_PROCESSORS:
                             real_merchant = self._extract_real_merchant(text)
                             if real_merchant:
-                                print(f"  → Payment processor detected: {vendor} -> Real merchant: {real_merchant}")
+                                logger.debug("Payment processor detected: %s -> %s", vendor, real_merchant)
+                                if _debug is not None:
+                                    _debug['patterns_matched']['vendor'] = 'payment_processor_real_merchant'
+                                    _debug['confidence_per_field']['vendor'] = 0.8
                                 return real_merchant
+                        if _debug is not None:
+                            _debug['patterns_matched']['vendor'] = 'fallback_first_line'
+                            _debug['confidence_per_field']['vendor'] = 0.5
                         return vendor
 
             return None
 
-        except Exception as e:
-            print(f"Error extracting vendor: {str(e)}")
+        except (re.error, AttributeError, IndexError):
+            logger.warning("Error extracting vendor", exc_info=True)
             return None
 
     def _extract_real_merchant(self, text: str) -> Optional[str]:
@@ -316,8 +466,6 @@ class ReceiptParser:
         Returns:
             Real merchant name or None
         """
-        # Check bank statement line (e.g., "statement as: PADDLE.NET* GEOGUESSR")
-        # Look for "statement as:" followed by the actual statement text (on same or next line)
         statement_match = re.search(
             r'statement\s+as:\s*\n?\s*([A-Z][A-Z0-9\s\.\*]+?)(?:\n|$)',
             text,
@@ -325,14 +473,11 @@ class ReceiptParser:
         )
         if statement_match:
             statement = statement_match.group(1).strip()
-            # Split on * or multiple spaces to get merchant name
             parts = re.split(r'[\*\s]{2,}', statement)
-            # Return last part (usually the merchant)
             for part in reversed(parts):
                 if len(part) > 2 and part.upper() not in ['NET', 'COM', 'INC', 'PADDLE']:
                     return part.strip().title()
 
-        # Check for product name in invoice
         product_match = re.search(
             r'(?:Product|Description|Item)\s*\n\s*([A-Z][a-zA-Z\s]{2,30}?)(?:\s+(?:Unlimited|Subscription|Pro|Monthly|Annual|Premium)|$)',
             text,
@@ -340,7 +485,6 @@ class ReceiptParser:
         )
         if product_match:
             product_name = product_match.group(1).strip()
-            # Clean up common suffixes
             product_name = re.sub(r'\s+(Unlimited|Subscription|Pro|Monthly|Annual|Premium)$', '', product_name, flags=re.IGNORECASE)
             if len(product_name) > 2:
                 return product_name
@@ -349,24 +493,15 @@ class ReceiptParser:
 
     def _clean_vendor_name(self, name: str) -> str:
         """Clean and format vendor name."""
-        # Remove special characters except spaces and &
         name = re.sub(r'[^A-Za-z0-9\s&\'-]', '', name)
-
-        # Title case
         name = name.title()
-
-        # Remove extra whitespace
         name = ' '.join(name.split())
-
-        # Limit to reasonable vendor name length (first 50 chars)
-        # This prevents grabbing too much text
         words = name.split()
-        if len(words) > 6:  # Most vendor names are 1-6 words
+        if len(words) > 6:
             name = ' '.join(words[:6])
-
         return name.strip()
 
-    def extract_amount(self, text: str) -> Optional[Decimal]:
+    def extract_amount(self, text: str, _debug=None) -> Optional[Decimal]:
         """
         Extract total amount from receipt using priority-based matching.
 
@@ -377,42 +512,30 @@ class ReceiptParser:
             Amount as Decimal or None
         """
         try:
-            # Try patterns in priority order (lower number = higher confidence)
-            for priority, pattern in self.amount_patterns:
-                matches = list(re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE))
+            for spec in self.amount_patterns:
+                matches = list(spec.compiled.finditer(text))
 
                 for match in matches:
-                    # Get narrow context window around the match (±50 chars)
-                    # This prevents false positives from unrelated blacklist terms elsewhere on the line
                     context_start = max(0, match.start() - 50)
                     context_end = min(len(text), match.end() + 50)
                     context_window = text[context_start:context_end].lower()
 
-                    # Skip if in blacklisted context
                     if any(bl in context_window for bl in self.blacklist_contexts):
                         continue
 
-                    # Skip subtotals (prefer "Total" over "Subtotal")
-                    # Check preceding context more broadly to catch subtotal labels
-                    # Check up to 150 chars before (covers multi-line formats)
                     preceding_text = text[max(0, match.start() - 150):match.start()].lower()
                     following_text = text[match.end():min(len(text), match.end() + 30)].lower()
 
-                    # Skip if THIS amount is explicitly labeled as subtotal
                     if 'subtotal' in preceding_text or 'subtotal' in following_text:
-                        # Unless it says "grand total" or similar
                         if 'grand' not in preceding_text and 'grand' not in following_text:
-                            # Also check if the MATCH ITSELF contains "total" keyword
-                            # (e.g., pattern matched "Total: $8.39")
                             match_text = match.group(0).lower()
                             if any(keyword in match_text for keyword in ['total', 'amount', 'paid', 'sum']):
-                                pass  # Keep this match, the pattern itself matched a total keyword
-                            # Or check if there's a "total" label closer to this amount
+                                pass
                             elif 'total' in text[max(0, match.start() - 50):match.start()].lower() and \
                                  'subtotal' not in text[max(0, match.start() - 50):match.start()].lower():
-                                pass  # Keep this match, it's likely the total
+                                pass
                             else:
-                                continue  # Skip it, it's a subtotal
+                                continue
 
                     amount_str = match.group(1) if match.groups() else match.group(0)
                     amount_str = amount_str.replace(',', '').replace('$', '').replace('€', '').replace('£', '').replace('¥', '').strip()
@@ -420,33 +543,56 @@ class ReceiptParser:
                     try:
                         amount = Decimal(amount_str)
 
-                        # Sanity checks
                         if amount <= 0:
                             continue
 
-                        # Flag suspiciously large amounts from low-priority patterns
-                        if amount > 10000 and priority > 2:
-                            continue  # Skip large amounts from generic patterns
+                        if amount > 10000 and spec.priority > 2:
+                            continue
 
-                        # Found valid amount from this priority level
+                        if _debug is not None:
+                            _debug['patterns_matched']['amount'] = spec.name
+                            _debug['confidence_per_field']['amount'] = 1.0 / spec.priority
+                            _debug['amount_match_span'] = (match.start(), match.end())
+
                         return amount
 
                     except (InvalidOperation, ValueError):
                         continue
 
-            # No amount found with any pattern
             return None
 
-        except Exception as e:
-            print(f"Error extracting amount: {str(e)}")
+        except (re.error, AttributeError):
+            logger.warning("Error extracting amount", exc_info=True)
             return None
 
-    def extract_currency(self, text: str) -> str:
+    def _detect_currency_in_text(self, text: str) -> Optional[str]:
+        """
+        Detect an explicit currency indicator in a text snippet.
+
+        Returns a 3-letter currency code, or None. Intentionally does NOT
+        infer USD from a bare '$' — that fallback lives in extract_currency
+        so it doesn't override the Canadian-indicator heuristic.
+        """
+        text_upper = text.upper()
+        for code in ('CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY'):
+            if code in text_upper:
+                return code
+        if 'C$' in text or 'C $' in text:
+            return 'CAD'
+        if '€' in text:
+            return 'EUR'
+        if '£' in text:
+            return 'GBP'
+        if '¥' in text:
+            return 'JPY'
+        return None
+
+    def extract_currency(self, text: str, _debug=None) -> str:
         """
         Extract currency from receipt with context awareness.
 
-        Looks for currency near 'Total' or 'Amount' to avoid picking
-        wrong currency when multiple currencies are shown.
+        First looks near the matched amount span (most specific evidence),
+        then falls back to document-level heuristics.
 
         Args:
             text: Receipt text
@@ -455,43 +601,43 @@ class ReceiptParser:
             Currency code (USD, EUR, etc.) or 'USD' as default
         """
         try:
+            # Strategy 0: Look near the amount match span — currency of the
+            # specific transaction amount, not just any currency in the doc.
+            if _debug is not None and 'amount_match_span' in _debug:
+                start, end = _debug['amount_match_span']
+                vicinity = text[max(0, start - 200):min(len(text), end + 200)]
+                currency = self._detect_currency_in_text(vicinity)
+                if currency:
+                    return currency
+
             text_upper = text.upper()
 
-            # Strategy 0: Check for Canadian indicators first
-            # Many Canadian receipts don't explicitly say CAD near the total
+            # Strategy 1: Check for Canadian indicators first
+            # Many Canadian receipts don't say CAD explicitly near the total.
             if 'CANADA' in text_upper or 'GST' in text_upper or 'PST' in text_upper:
-                # Look for explicit currency codes near transaction keywords
                 for keyword in ['TOTAL', 'AMOUNT', 'CHARGED', 'PAID']:
                     keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
                     for pos in keyword_positions:
                         context = text_upper[pos:pos+100]
-                        # If we see USD explicitly near the total, it's USD
                         if 'USD' in context:
                             return 'USD'
 
-                # If Canadian indicators present but no USD near total, it's CAD
                 return 'CAD'
 
-            # Strategy 1: Look for currency near "TOTAL" or "AMOUNT" keywords
-            # This finds the currency actually used for the transaction
+            # Strategy 2: Look for currency near "TOTAL" or "AMOUNT" keywords
             for keyword in ['TOTAL', 'AMOUNT', 'CHARGED', 'PAID']:
-                # Find all occurrences of the keyword
                 keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
 
                 for pos in keyword_positions:
-                    # Check 100 chars after the keyword for currency
                     context = text_upper[pos:pos+100]
 
-                    # Check for currency codes in order of specificity
                     for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
                         if code in context:
                             return code
 
-                    # Check for C$ prefix
                     if 'C$' in text[pos:pos+100]:
                         return 'CAD'
 
-                    # Check for Euro symbol
                     if '€' in text[pos:pos+100]:
                         return 'EUR'
                     if '£' in text[pos:pos+100]:
@@ -499,8 +645,7 @@ class ReceiptParser:
                     if '¥' in text[pos:pos+100]:
                         return 'JPY'
 
-            # Strategy 2: If no context match, count currency occurrences
-            # Use the currency that appears most frequently
+            # Strategy 3: Count currency occurrences
             currency_counts = {}
             for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
                 count = text_upper.count(code)
@@ -508,14 +653,13 @@ class ReceiptParser:
                     currency_counts[code] = count
 
             if currency_counts:
-                # Return the most frequent currency
                 return max(currency_counts, key=currency_counts.get)
 
-            # Strategy 3: Check for C$ prefix anywhere
+            # Strategy 4: Check for C$ prefix anywhere
             if 'C$' in text or 'C $' in text:
                 return 'CAD'
 
-            # Strategy 4: Check for symbols
+            # Strategy 5: Check for symbols
             if '€' in text:
                 return 'EUR'
             if '£' in text:
@@ -523,18 +667,51 @@ class ReceiptParser:
             if '¥' in text:
                 return 'JPY'
 
-            # Strategy 5: If we see $ but no currency code, default to USD
+            # Strategy 6: If we see $ but no currency code, default to USD
             if '$' in text:
                 return 'USD'
 
-            # Final fallback
             return 'USD'
 
-        except Exception as e:
-            print(f"Error extracting currency: {str(e)}")
+        except (re.error, AttributeError):
+            logger.warning("Error extracting currency", exc_info=True)
             return 'USD'
 
-    def extract_date(self, text: str) -> Optional[str]:
+    def _detect_date_locale(self, text: str) -> str:
+        """
+        Detect date locale from receipt context to disambiguate MM/DD vs DD/MM.
+
+        Returns:
+            'MM/DD' for North American, 'DD/MM' for European
+        """
+        text_upper = text.upper()
+        if any(t in text_upper for t in ('GST', 'PST', 'HST', 'CANADA')):
+            return 'MM/DD'  # North American
+        if '£' in text or 'VAT' in text_upper:
+            return 'DD/MM'  # European
+        return 'MM/DD'  # Default to North American
+
+    def _parse_numeric_date_with_locale(self, date_str: str, locale: str) -> Optional[str]:
+        """Parse a numeric date string using locale to resolve MM/DD vs DD/MM ambiguity."""
+        sep = '/' if '/' in date_str else '-'
+        parts = date_str.split(sep)
+        if len(parts) != 3:
+            return None
+
+        if locale == 'DD/MM':
+            formats = [f'%d{sep}%m{sep}%Y', f'%d{sep}%m{sep}%y']
+        else:
+            formats = [f'%m{sep}%d{sep}%Y', f'%m{sep}%d{sep}%y']
+
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(date_str.strip(), fmt)
+                return dt.strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+        return None
+
+    def extract_date(self, text: str, _debug=None) -> Optional[str]:
         """
         Extract receipt date.
 
@@ -545,19 +722,25 @@ class ReceiptParser:
             Date in YYYY-MM-DD format or None
         """
         try:
-            # Try each date pattern
-            for pattern in self.date_patterns:
-                matches = re.findall(pattern, text, re.IGNORECASE)
-                for match in matches:
-                    # Try to parse the date
-                    parsed_date = self._parse_date_string(match)
+            locale = self._detect_date_locale(text)
+
+            for spec in self.date_patterns:
+                for match in spec.compiled.finditer(text):
+                    date_str = match.group(1)
+                    if spec.name == 'numeric_date_ambiguous':
+                        parsed_date = self._parse_numeric_date_with_locale(date_str, locale)
+                    else:
+                        parsed_date = self._parse_date_string(date_str)
                     if parsed_date:
+                        if _debug is not None:
+                            _debug['patterns_matched']['date'] = spec.name
+                            _debug['confidence_per_field']['date'] = 0.9
                         return parsed_date
 
             return None
 
-        except Exception as e:
-            print(f"Error extracting date: {str(e)}")
+        except (re.error, ValueError, AttributeError):
+            logger.warning("Error extracting date", exc_info=True)
             return None
 
     def _parse_date_string(self, date_str: str) -> Optional[str]:
@@ -570,12 +753,9 @@ class ReceiptParser:
         Returns:
             Date in YYYY-MM-DD format or None
         """
-        # Handle ordinal suffixes (1st, 2nd, 3rd, 23rd)
         if re.search(r'\d+(?:st|nd|rd|th)', date_str):
-            # Remove ordinal suffix: "23rd November 2025" -> "23 November 2025"
             date_str = re.sub(r'(\d+)(?:st|nd|rd|th)', r'\1', date_str)
 
-        # Common date format patterns
         formats = [
             '%m/%d/%Y', '%m-%d-%Y',
             '%d/%m/%Y', '%d-%m-%Y',
@@ -584,8 +764,8 @@ class ReceiptParser:
             '%d/%m/%y', '%d-%m-%y',
             '%B %d, %Y', '%b %d, %Y',
             '%B %d %Y', '%b %d %Y',
-            '%d %B %Y', '%d %b %Y',  # 23 November 2025 (after stripping ordinal)
-            '%B %d/%Y', '%b %d/%Y',  # April 9/2025
+            '%d %B %Y', '%d %b %Y',
+            '%B %d/%Y', '%b %d/%Y',
         ]
 
         for fmt in formats:
@@ -597,10 +777,14 @@ class ReceiptParser:
 
         return None
 
-    def extract_tax(self, text: str) -> Optional[Decimal]:
+    def extract_tax(self, text: str, _debug=None) -> Optional[Decimal]:
         """
         Extract tax amount from receipt, summing multiple tax lines if present.
         (e.g., Sephora has both GST and HST that should be summed)
+
+        Deduplicates by the character span of the captured amount group so that
+        the same text position is never counted twice even if multiple patterns
+        match it.
 
         Args:
             text: Receipt text
@@ -609,17 +793,18 @@ class ReceiptParser:
             Total tax amount as Decimal or None
         """
         try:
+            seen_spans: set = set()  # (start, end) of each captured amount group
             taxes = []
 
-            # Try each tax pattern
-            for pattern in self.tax_patterns:
-                matches = re.findall(pattern, text, re.IGNORECASE)
-                for match in matches:
-                    # Handle tuple results from patterns with multiple groups
-                    if isinstance(match, tuple):
-                        match = match[-1]  # Take last group (the amount)
+            for spec in self.tax_patterns:
+                for match in spec.compiled.finditer(text):
+                    amount_span = match.span(match.lastindex or 1)
+                    if amount_span in seen_spans:
+                        continue
+                    seen_spans.add(amount_span)
 
-                    tax_str = match.replace(',', '').replace('$', '').strip()
+                    amount_group = match.group(match.lastindex or 1)
+                    tax_str = amount_group.replace(',', '').replace('$', '').strip()
                     try:
                         tax = Decimal(tax_str)
                         if tax > 0:
@@ -627,19 +812,17 @@ class ReceiptParser:
                     except (InvalidOperation, ValueError):
                         continue
 
-            # Deduplicate taxes (same amount matched multiple times in receipt)
-            # Use set to get unique values, then convert back to list
             if taxes:
-                unique_taxes = list(set(taxes))
-                total_tax = sum(unique_taxes)
-                if len(unique_taxes) > 1:
-                    print(f"  → Found {len(unique_taxes)} unique tax line(s), total: ${total_tax}")
+                total_tax = sum(taxes)
+                logger.debug("Found %d tax line(s), total: %s", len(taxes), total_tax)
+                if _debug is not None:
+                    _debug['patterns_matched']['tax'] = f'{len(taxes)}_lines'
+                    _debug['confidence_per_field']['tax'] = 0.9
                 return total_tax
-
             return None
 
-        except Exception as e:
-            print(f"Error extracting tax: {str(e)}")
+        except (re.error, AttributeError, InvalidOperation):
+            logger.warning("Error extracting tax", exc_info=True)
             return None
 
     def _calculate_confidence(self, parsed_data: Dict[str, Any]) -> float:
@@ -653,13 +836,11 @@ class ReceiptParser:
             Confidence score between 0.0 and 1.0
         """
         score = 0.0
-        total_fields = 5  # vendor, amount, currency, date, tax
 
-        # Give points for each field found
         if parsed_data.get('vendor'):
             score += 0.25
         if parsed_data.get('amount'):
-            score += 0.35  # Amount is most important
+            score += 0.35
         if parsed_data.get('date'):
             score += 0.25
         if parsed_data.get('currency'):
