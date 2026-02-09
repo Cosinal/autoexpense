@@ -1,10 +1,11 @@
 """
 Email ingestion worker that combines email and storage services.
-Processes emails, extracts attachments, and uploads to storage.
+Production-grade implementation with state machine, idempotent operations, and Decimal precision.
 """
 
-import uuid
+import logging
 from typing import List, Dict, Optional
+from decimal import Decimal
 from datetime import datetime
 
 from app.services.email import EmailService
@@ -12,6 +13,8 @@ from app.services.storage import StorageService
 from app.services.ocr import OCRService
 from app.services.parser import ReceiptParser
 from app.utils.supabase import get_supabase_client
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionService:
@@ -25,9 +28,51 @@ class IngestionService:
         self.parser = ReceiptParser()
         self.supabase = get_supabase_client()
 
+    def _decimal_to_str(self, value: Optional[Decimal]) -> Optional[str]:
+        """
+        Convert Decimal to string for database storage.
+
+        Supabase-py JSON encoder cannot serialize Decimal objects directly.
+
+        Args:
+            value: Decimal value or None
+
+        Returns:
+            String representation or None
+        """
+        return str(value) if value is not None else None
+
+    def _check_duplicate_by_hash(self, user_id: str, file_hash: str) -> bool:
+        """
+        Check if a receipt with this file hash already exists for the user.
+
+        Args:
+            user_id: User UUID
+            file_hash: SHA-256 hash of file content
+
+        Returns:
+            True if duplicate exists, False otherwise
+        """
+        try:
+            response = self.supabase.table('receipts').select('id').eq(
+                'user_id', user_id
+            ).eq('file_hash', file_hash).limit(1).execute()
+
+            return len(response.data) > 0
+
+        except Exception as e:
+            logger.warning("Error checking duplicate receipt", extra={
+                "user_id": user_id,
+                "file_hash": file_hash,
+                "error": str(e)
+            })
+            return False
+
     def process_email(self, message_id: str, user_id: str) -> Dict:
         """
-        Process a single email message.
+        Process a single email message with state machine and idempotent operations.
+
+        State transitions: processing → success | no_receipts | failed
 
         Args:
             message_id: Gmail message ID
@@ -39,8 +84,9 @@ class IngestionService:
         result = {
             'message_id': message_id,
             'success': False,
-            'attachments_processed': 0,
+            'status': 'failed',
             'receipts_created': [],
+            'receipts_skipped': 0,
             'errors': []
         }
 
@@ -48,115 +94,360 @@ class IngestionService:
             # Get full message
             message = self.email_service.get_message(message_id)
             if not message:
-                result['errors'].append("Failed to fetch message")
+                error_msg = "Failed to fetch message from Gmail"
+                result['errors'].append(error_msg)
+                self.email_service.mark_message_processed(
+                    message_id, user_id, 'failed',
+                    failure_reason=error_msg
+                )
                 return result
 
             # Extract metadata
             metadata = self.email_service.extract_email_metadata(message)
-            print(f"Processing email: {metadata.get('subject', 'No subject')}")
 
-            # Extract attachments
+            # Mark as processing (UPSERT with status='processing')
+            self.email_service.mark_message_processing(
+                message_id, user_id, metadata['received_at']
+            )
+
+            logger.info("Processing email", extra={
+                "message_id": message_id,
+                "user_id": user_id,
+                "subject": metadata.get('subject', 'No subject')
+            })
+
+            # Extract attachments (recursive MIME tree walk)
             attachments = self.email_service.extract_attachments(message)
 
-            if not attachments:
-                print(f"No attachments found in message {message_id}, checking email body...")
+            # Process attachments first
+            for idx, (filename, file_data, mime_type) in enumerate(attachments):
+                try:
+                    if not self._is_receipt_file(filename, mime_type):
+                        logger.debug("Skipping non-receipt file", extra={
+                            "filename": filename,
+                            "mime_type": mime_type
+                        })
+                        continue
 
-                # Try to process email body as receipt (Uber, Amazon, etc.)
+                    # Check file hash for idempotency BEFORE uploading
+                    file_hash = self.storage_service.calculate_file_hash(file_data)
+
+                    if self._check_duplicate_by_hash(user_id, file_hash):
+                        logger.info("Skipping duplicate receipt", extra={
+                            "file_hash": file_hash,
+                            "filename": filename
+                        })
+                        result['receipts_skipped'] += 1
+                        continue
+
+                    # Process this source
+                    receipt_id = self._process_source(
+                        user_id=user_id,
+                        message_id=message_id,
+                        source_type='attachment',
+                        attachment_index=idx,
+                        filename=filename,
+                        file_data=file_data,
+                        mime_type=mime_type,
+                        file_hash=file_hash
+                    )
+
+                    if receipt_id:
+                        result['receipts_created'].append(receipt_id)
+                        logger.info("Processed attachment", extra={
+                            "filename": filename,
+                            "receipt_id": receipt_id
+                        })
+                    else:
+                        result['errors'].append(f"Failed to process {filename}")
+
+                except Exception as e:
+                    error_msg = f"Error processing attachment {filename}: {str(e)}"
+                    logger.error(error_msg, exc_info=True)
+                    result['errors'].append(error_msg)
+
+            # Process email body if no attachments or no receipts from attachments
+            if not attachments or len(result['receipts_created']) == 0:
+                logger.debug("Checking email body for receipt data")
+
                 try:
                     html_body, text_body = self.email_service.extract_email_body(message)
 
                     if html_body or text_body:
-                        # Convert HTML to text for processing
+                        # Convert HTML to text
                         body_text = html_body if html_body else text_body
                         if html_body:
                             body_text = self.email_service.convert_html_to_text(html_body)
 
-                        # Process the email body as a receipt
-                        receipt_id = self._process_email_body_as_receipt(
-                            user_id=user_id,
-                            message_id=message_id,
-                            body_text=body_text,
-                            metadata=metadata
-                        )
+                        # Create synthetic "file" from body text
+                        body_bytes = body_text.encode('utf-8')
+                        file_hash = self.storage_service.calculate_file_hash(body_bytes)
 
-                        if receipt_id:
-                            result['receipts_created'].append(receipt_id)
-                            result['attachments_processed'] = 1  # Count body as 1 "receipt"
-                            print(f"✓ Processed email body as receipt")
+                        # Check duplicate
+                        if not self._check_duplicate_by_hash(user_id, file_hash):
+                            # Process body as receipt (with pre-parsed text to skip OCR)
+                            receipt_id = self._process_source(
+                                user_id=user_id,
+                                message_id=message_id,
+                                source_type='body',
+                                attachment_index=None,
+                                filename=f"email_{message_id[:8]}.txt",
+                                file_data=body_bytes,
+                                mime_type='text/plain',
+                                file_hash=file_hash,
+                                pre_parsed_text=body_text
+                            )
+
+                            if receipt_id:
+                                result['receipts_created'].append(receipt_id)
+                                logger.info("Processed email body as receipt", extra={
+                                    "receipt_id": receipt_id
+                                })
                         else:
-                            print(f"Could not extract receipt data from email body")
+                            logger.info("Skipping duplicate email body receipt")
+                            result['receipts_skipped'] += 1
 
                 except Exception as e:
-                    print(f"Error processing email body: {str(e)}")
+                    error_msg = f"Error processing email body: {str(e)}"
+                    logger.warning(error_msg, exc_info=True)
+                    result['errors'].append(error_msg)
 
-                # Still mark as processed to avoid re-checking
-                self.email_service.mark_message_processed(
-                    message_id,
-                    user_id,
-                    result['attachments_processed']
-                )
+            # Determine final status
+            receipt_count = len(result['receipts_created'])
+
+            if receipt_count > 0:
+                result['status'] = 'success'
                 result['success'] = True
-                return result
+            elif result['receipts_skipped'] > 0:
+                # Duplicates were skipped, but this is still successful processing
+                result['status'] = 'success'
+                result['success'] = True
+            else:
+                result['status'] = 'no_receipts'
+                result['success'] = True  # Successfully processed, just no receipts found
 
-            # Process each attachment
-            for filename, file_data, mime_type in attachments:
-                try:
-                    # Only process receipt-like files
-                    if not self._is_receipt_file(filename, mime_type):
-                        print(f"Skipping non-receipt file: {filename}")
-                        continue
-
-                    # Upload to storage
-                    file_url, file_hash, file_path = self.storage_service.upload_receipt_file(
-                        user_id=user_id,
-                        filename=filename,
-                        file_data=file_data,
-                        mime_type=mime_type
-                    )
-
-                    if file_url:
-                        # Run OCR and parsing on the file
-                        parsed_data = self._process_receipt_file(
-                            file_data=file_data,
-                            mime_type=mime_type,
-                            filename=filename
-                        )
-
-                        # Create receipt record with parsed data
-                        receipt_id = self._create_receipt_record(
-                            user_id=user_id,
-                            file_url=file_url,
-                            file_hash=file_hash,
-                            file_name=filename,
-                            mime_type=mime_type,
-                            parsed_data=parsed_data
-                        )
-
-                        if receipt_id:
-                            result['receipts_created'].append(receipt_id)
-                            result['attachments_processed'] += 1
-                            print(f"✓ Processed: {filename}")
-                        else:
-                            result['errors'].append(f"Failed to create receipt record for {filename}")
-                    else:
-                        result['errors'].append(f"Failed to upload {filename}")
-
-                except Exception as e:
-                    result['errors'].append(f"Error processing {filename}: {str(e)}")
-
-            # Mark message as processed
+            # Mark final status
             self.email_service.mark_message_processed(
-                message_id,
-                user_id,
-                result['attachments_processed']
+                message_id, user_id, result['status'], receipt_count
             )
 
-            result['success'] = True
+            logger.info("Email processing complete", extra={
+                "message_id": message_id,
+                "status": result['status'],
+                "receipts_created": receipt_count,
+                "receipts_skipped": result['receipts_skipped']
+            })
+
             return result
 
         except Exception as e:
-            result['errors'].append(f"Error processing email: {str(e)}")
+            error_msg = f"Error processing email: {str(e)}"
+            logger.error(error_msg, extra={
+                "message_id": message_id,
+                "user_id": user_id
+            }, exc_info=True)
+
+            result['errors'].append(error_msg)
+            result['status'] = 'failed'
+
+            # Mark as failed
+            self.email_service.mark_message_processed(
+                message_id, user_id, 'failed',
+                failure_reason=error_msg
+            )
+
             return result
+
+    def _process_source(
+        self,
+        user_id: str,
+        message_id: str,
+        source_type: str,
+        attachment_index: Optional[int],
+        filename: str,
+        file_data: bytes,
+        mime_type: str,
+        file_hash: str,
+        pre_parsed_text: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Process a single receipt source (attachment or body).
+
+        Orchestration: upload → OCR (if needed) → parse → UPSERT receipt
+
+        Args:
+            user_id: User UUID
+            message_id: Gmail message ID
+            source_type: 'attachment' or 'body'
+            attachment_index: Index in attachment list (None for body)
+            filename: Original filename
+            file_data: Raw file bytes
+            mime_type: MIME type
+            file_hash: Pre-computed SHA-256 hash
+            pre_parsed_text: If provided, skip OCR and use this text
+
+        Returns:
+            Receipt ID if successful, None otherwise
+        """
+        file_path = None
+
+        try:
+            # Step 1: Upload to storage (idempotent, content-addressed)
+            returned_hash, file_path = self.storage_service.upload_receipt(
+                user_id=user_id,
+                filename=filename,
+                file_data=file_data,
+                mime_type=mime_type
+            )
+
+            if not file_path:
+                logger.error("Storage upload failed", extra={
+                    "filename": filename,
+                    "user_id": user_id
+                })
+                return None
+
+            # Verify hash matches
+            if returned_hash != file_hash:
+                logger.error("File hash mismatch after upload", extra={
+                    "expected": file_hash,
+                    "got": returned_hash
+                })
+                return None
+
+            # Step 2: Extract text (OCR or use pre-parsed)
+            if pre_parsed_text:
+                text = pre_parsed_text
+                logger.debug("Using pre-parsed text (skipping OCR)")
+            else:
+                logger.debug("Running OCR", extra={"filename": filename})
+                text = self.ocr_service.extract_and_normalize(
+                    file_data=file_data,
+                    mime_type=mime_type,
+                    filename=filename
+                )
+
+            if not text:
+                logger.warning("No text extracted", extra={"filename": filename})
+                # Still create receipt record with empty fields
+                parsed_data = {}
+            else:
+                # Step 3: Parse receipt data
+                logger.debug("Parsing receipt data", extra={
+                    "text_length": len(text)
+                })
+                parsed_data = self.parser.parse(text)
+
+            # Step 4: Create receipt record (UPSERT with UNIQUE constraint on file_hash)
+            receipt_id = self._upsert_receipt_record(
+                user_id=user_id,
+                file_path=file_path,
+                file_hash=file_hash,
+                file_name=filename,
+                mime_type=mime_type,
+                source_message_id=message_id,
+                source_type=source_type,
+                attachment_index=attachment_index,
+                parsed_data=parsed_data
+            )
+
+            if receipt_id:
+                logger.debug("Receipt record created", extra={
+                    "receipt_id": receipt_id,
+                    "vendor": parsed_data.get('vendor'),
+                    "amount": parsed_data.get('amount')
+                })
+
+            return receipt_id
+
+        except Exception as e:
+            logger.error("Error processing source", extra={
+                "filename": filename,
+                "source_type": source_type,
+                "error": str(e)
+            }, exc_info=True)
+
+            # Orphan cleanup: if file was uploaded but DB insert failed, delete it
+            if file_path:
+                logger.warning("Cleaning up orphaned file", extra={"file_path": file_path})
+                self.storage_service.delete_file(file_path)
+
+            return None
+
+    def _upsert_receipt_record(
+        self,
+        user_id: str,
+        file_path: str,
+        file_hash: str,
+        file_name: str,
+        mime_type: str,
+        source_message_id: str,
+        source_type: str,
+        attachment_index: Optional[int],
+        parsed_data: Dict
+    ) -> Optional[str]:
+        """
+        Create or update receipt record in database (idempotent UPSERT).
+
+        Uses UNIQUE constraint on (user_id, file_hash) for deduplication.
+
+        Args:
+            user_id: User UUID
+            file_path: Storage path
+            file_hash: SHA-256 hash
+            file_name: Original filename
+            mime_type: File MIME type
+            source_message_id: Gmail message ID
+            source_type: 'attachment' or 'body'
+            attachment_index: Index in attachment list
+            parsed_data: Parsed receipt data from parser
+
+        Returns:
+            Receipt ID if successful, None otherwise
+        """
+        try:
+            # Build receipt data (preserving Decimal precision)
+            receipt_data = {
+                'user_id': user_id,
+                'file_path': file_path,
+                'file_hash': file_hash,
+                'file_name': file_name,
+                'mime_type': mime_type,
+                'source_message_id': source_message_id,
+                'source_type': source_type,
+                'attachment_index': attachment_index,
+                'vendor': parsed_data.get('vendor'),
+                'amount': self._decimal_to_str(parsed_data.get('amount')),
+                'currency': parsed_data.get('currency', 'USD'),
+                'date': parsed_data.get('date'),
+                'tax': self._decimal_to_str(parsed_data.get('tax')),
+                'ingestion_debug': parsed_data.get('debug')
+            }
+
+            # UPSERT: insert or do nothing if constraint violated (idempotent)
+            response = self.supabase.table('receipts').upsert(
+                receipt_data,
+                on_conflict='user_id,file_hash',
+                ignore_duplicates=True
+            ).execute()
+
+            if response.data and len(response.data) > 0:
+                return response.data[0]['id']
+
+            # If ignore_duplicates=True and conflict occurred, response.data may be empty
+            # This is expected and means the receipt already exists
+            logger.debug("Receipt UPSERT returned no data (likely duplicate)", extra={
+                "file_hash": file_hash
+            })
+            return None
+
+        except Exception as e:
+            logger.error("Error upserting receipt record", extra={
+                "user_id": user_id,
+                "file_hash": file_hash,
+                "error": str(e)
+            }, exc_info=True)
+            return None
 
     def _is_receipt_file(self, filename: str, mime_type: str) -> bool:
         """
@@ -192,211 +483,6 @@ class IngestionService:
 
         return False
 
-    def _process_receipt_file(
-        self,
-        file_data: bytes,
-        mime_type: str,
-        filename: str
-    ) -> Dict:
-        """
-        Process receipt file with OCR and parsing.
-
-        Args:
-            file_data: Raw file bytes
-            mime_type: File MIME type
-            filename: Filename
-
-        Returns:
-            Dictionary with parsed data
-        """
-        try:
-            print(f"  → Running OCR on {filename}...")
-
-            # Extract text using OCR
-            text = self.ocr_service.extract_and_normalize(
-                file_data=file_data,
-                mime_type=mime_type,
-                filename=filename
-            )
-
-            if not text:
-                print("  ⚠ No text extracted from file")
-                return {}
-
-            print(f"  → Extracted {len(text)} characters of text")
-            print(f"  → Parsing receipt data...")
-
-            # Parse the text
-            parsed_data = self.parser.parse(text)
-
-            # Log what we found
-            if parsed_data.get('vendor'):
-                print(f"  → Vendor: {parsed_data['vendor']}")
-            if parsed_data.get('amount'):
-                print(f"  → Amount: {parsed_data['currency']} {parsed_data['amount']}")
-            if parsed_data.get('tax'):
-                print(f"  → Tax: {parsed_data['tax']}")
-            if parsed_data.get('date'):
-                print(f"  → Date: {parsed_data['date']}")
-
-            print(f"  → Confidence: {parsed_data.get('confidence', 0):.0%}")
-
-            return parsed_data
-
-        except Exception as e:
-            print(f"  ✗ Error processing file: {str(e)}")
-            return {}
-
-    def _process_email_body_as_receipt(
-        self,
-        user_id: str,
-        message_id: str,
-        body_text: str,
-        metadata: Dict
-    ) -> Optional[str]:
-        """
-        Process email body as a receipt (for HTML receipts like Uber, Amazon, etc.).
-
-        Args:
-            user_id: User UUID
-            message_id: Gmail message ID
-            body_text: Email body text (converted from HTML if needed)
-            metadata: Email metadata (subject, from, date, etc.)
-
-        Returns:
-            Receipt ID if successful, None otherwise
-        """
-        try:
-            print(f"  → Parsing email body as receipt...")
-
-            # Parse the email body text
-            parsed_data = self.parser.parse(body_text)
-
-            # If no useful data was extracted, skip
-            if not parsed_data.get('amount') and not parsed_data.get('vendor'):
-                print(f"  ⚠ No receipt data found in email body")
-                return None
-
-            # Try to extract vendor from email subject or sender if not found in body
-            if not parsed_data.get('vendor'):
-                # Try to get vendor from subject
-                subject = metadata.get('subject', '')
-                if subject:
-                    # Extract first few words from subject as vendor
-                    parsed_data['vendor'] = ' '.join(subject.split()[:5])
-                else:
-                    # Use sender email domain as vendor
-                    from_email = metadata.get('from', '')
-                    if '@' in from_email:
-                        domain = from_email.split('@')[1].split('.')[0]
-                        parsed_data['vendor'] = domain.capitalize()
-
-            # Store email body as a "file" in storage (as text)
-            # This allows users to reference the original email later
-            import uuid
-            receipt_id = str(uuid.uuid4())
-
-            # Create a text "file" from the email body
-            body_bytes = body_text.encode('utf-8')
-            filename = f"email_{message_id[:8]}.txt"
-
-            file_url, file_hash, file_path = self.storage_service.upload_receipt_file(
-                user_id=user_id,
-                filename=filename,
-                file_data=body_bytes,
-                mime_type='text/plain',
-                receipt_id=receipt_id
-            )
-
-            if not file_url:
-                print(f"  ⚠ Failed to store email body")
-                return None
-
-            # Log what we found
-            if parsed_data.get('vendor'):
-                print(f"  → Vendor: {parsed_data['vendor']}")
-            if parsed_data.get('amount'):
-                print(f"  → Amount: {parsed_data.get('currency', 'USD')} {parsed_data['amount']}")
-            if parsed_data.get('date'):
-                print(f"  → Date: {parsed_data['date']}")
-
-            # Create receipt record
-            receipt_id = self._create_receipt_record(
-                user_id=user_id,
-                file_url=file_url,
-                file_hash=file_hash,
-                file_name=filename,
-                mime_type='text/plain',
-                parsed_data=parsed_data
-            )
-
-            return receipt_id
-
-        except Exception as e:
-            print(f"  ✗ Error processing email body: {str(e)}")
-            return None
-
-    def _create_receipt_record(
-        self,
-        user_id: str,
-        file_url: str,
-        file_hash: str,
-        file_name: str,
-        mime_type: str,
-        parsed_data: Optional[Dict] = None
-    ) -> str:
-        """
-        Create a receipt record in the database.
-
-        Args:
-            user_id: User UUID
-            file_url: URL to file in storage
-            file_hash: SHA-256 hash of file
-            file_name: Original filename
-            mime_type: File MIME type
-
-        Returns:
-            Receipt ID if successful, None otherwise
-        """
-        try:
-            # Start with basic file info
-            receipt_data = {
-                'user_id': user_id,
-                'file_url': file_url,
-                'file_hash': file_hash,
-                'file_name': file_name,
-                'mime_type': mime_type,
-            }
-
-            # Add parsed data if available
-            if parsed_data:
-                receipt_data.update({
-                    'vendor': parsed_data.get('vendor'),
-                    'amount': float(parsed_data['amount']) if parsed_data.get('amount') else None,
-                    'currency': parsed_data.get('currency', 'USD'),
-                    'date': parsed_data.get('date'),
-                    'tax': float(parsed_data['tax']) if parsed_data.get('tax') else None,
-                })
-            else:
-                # No parsed data, use defaults
-                receipt_data.update({
-                    'vendor': None,
-                    'amount': None,
-                    'currency': 'USD',
-                    'date': None,
-                    'tax': None,
-                })
-
-            response = self.supabase.table('receipts').insert(receipt_data).execute()
-
-            if response.data:
-                return response.data[0]['id']
-            return None
-
-        except Exception as e:
-            print(f"Error creating receipt record: {str(e)}")
-            return None
-
     def sync_emails(self, user_id: str, days_back: int = 7) -> Dict:
         """
         Sync all unprocessed emails for a user.
@@ -412,11 +498,12 @@ class IngestionService:
             'messages_checked': 0,
             'messages_processed': 0,
             'receipts_created': 0,
+            'receipts_skipped': 0,
             'errors': []
         }
 
         try:
-            # Get unprocessed messages
+            # Get unprocessed messages (N+1 fix: single query)
             messages = self.email_service.get_unprocessed_messages(
                 user_id=user_id,
                 days_back=days_back,
@@ -424,7 +511,10 @@ class IngestionService:
             )
 
             summary['messages_checked'] = len(messages)
-            print(f"Found {len(messages)} unprocessed messages")
+            logger.info("Starting email sync", extra={
+                "user_id": user_id,
+                "unprocessed_count": len(messages)
+            })
 
             # Process each message
             for msg in messages:
@@ -433,12 +523,21 @@ class IngestionService:
                 if result['success']:
                     summary['messages_processed'] += 1
                     summary['receipts_created'] += len(result['receipts_created'])
+                    summary['receipts_skipped'] += result['receipts_skipped']
 
                 if result['errors']:
                     summary['errors'].extend(result['errors'])
 
+            logger.info("Email sync complete", extra={
+                "user_id": user_id,
+                "messages_processed": summary['messages_processed'],
+                "receipts_created": summary['receipts_created']
+            })
+
             return summary
 
         except Exception as e:
-            summary['errors'].append(f"Sync failed: {str(e)}")
+            error_msg = f"Sync failed: {str(e)}"
+            logger.error(error_msg, extra={"user_id": user_id}, exc_info=True)
+            summary['errors'].append(error_msg)
             return summary

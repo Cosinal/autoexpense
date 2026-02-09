@@ -1,47 +1,60 @@
 """
 Receipts API router for listing and filtering receipts.
+Production-grade implementation with Decimal support and signed URLs.
 """
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from datetime import date
+from decimal import Decimal
 import math
+import logging
 
 from app.models.receipt import ReceiptResponse, ReceiptList
 from app.utils.supabase import get_supabase_client
 from app.services.storage import StorageService
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
+logger = logging.getLogger(__name__)
 
 
 def generate_signed_url_for_receipt(receipt_data: dict) -> dict:
     """
-    Generate signed URL for receipt file access.
+    Generate signed URL for receipt file access using file_path.
 
     Args:
         receipt_data: Receipt dictionary from database
 
     Returns:
-        Receipt data with signed URL
+        Receipt data with signed URL added
     """
     try:
+        file_path = receipt_data.get('file_path')
+
+        if not file_path:
+            logger.warning("Receipt missing file_path", extra={
+                "receipt_id": receipt_data.get('id')
+            })
+            return receipt_data
+
         storage = StorageService()
 
-        # Extract file path from public URL
-        file_url = receipt_data.get('file_url', '')
-        if file_url and 'public/receipts/' in file_url:
-            # Extract path after 'public/receipts/'
-            file_path = file_url.split('public/receipts/')[1]
+        # Generate signed URL (valid for 1 hour)
+        signed_url = storage.signed_url(file_path, expires_in=3600)
 
-            # Generate signed URL (valid for 1 hour)
-            signed_url = storage.create_signed_url(file_path, expires_in=3600)
-
-            if signed_url:
-                receipt_data['file_url'] = signed_url
+        if signed_url:
+            receipt_data['file_url'] = signed_url
+        else:
+            logger.warning("Failed to generate signed URL", extra={
+                "receipt_id": receipt_data.get('id'),
+                "file_path": file_path
+            })
 
     except Exception as e:
-        print(f"Error generating signed URL: {str(e)}")
-        # Keep original URL if signing fails
+        logger.error("Error generating signed URL", extra={
+            "receipt_id": receipt_data.get('id'),
+            "error": str(e)
+        })
 
     return receipt_data
 
@@ -50,8 +63,8 @@ def generate_signed_url_for_receipt(receipt_data: dict) -> dict:
 async def list_receipts(
     user_id: str = Query(..., description="User ID"),
     vendor: Optional[str] = Query(None, description="Filter by vendor name"),
-    min_amount: Optional[float] = Query(None, description="Minimum amount"),
-    max_amount: Optional[float] = Query(None, description="Maximum amount"),
+    min_amount: Optional[Decimal] = Query(None, description="Minimum amount"),
+    max_amount: Optional[Decimal] = Query(None, description="Maximum amount"),
     start_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
     currency: Optional[str] = Query(None, description="Filter by currency"),
@@ -83,10 +96,10 @@ async def list_receipts(
             query = query.ilike('vendor', f'%{vendor}%')
 
         if min_amount is not None:
-            query = query.gte('amount', min_amount)
+            query = query.gte('amount', str(min_amount))
 
         if max_amount is not None:
-            query = query.lte('amount', max_amount)
+            query = query.lte('amount', str(max_amount))
 
         if start_date:
             query = query.gte('date', start_date.isoformat())
@@ -126,6 +139,10 @@ async def list_receipts(
         )
 
     except Exception as e:
+        logger.error("Failed to fetch receipts", extra={
+            "user_id": user_id,
+            "error": str(e)
+        }, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch receipts: {str(e)}"
@@ -142,7 +159,7 @@ async def get_receipt(receipt_id: str, user_id: str = Query(..., description="Us
         user_id: User ID (for authorization)
 
     Returns:
-        Receipt details
+        Receipt details with signed URL
     """
     try:
         supabase = get_supabase_client()
@@ -162,6 +179,11 @@ async def get_receipt(receipt_id: str, user_id: str = Query(..., description="Us
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Failed to fetch receipt", extra={
+            "receipt_id": receipt_id,
+            "user_id": user_id,
+            "error": str(e)
+        }, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch receipt: {str(e)}"
@@ -171,7 +193,7 @@ async def get_receipt(receipt_id: str, user_id: str = Query(..., description="Us
 @router.delete("/{receipt_id}")
 async def delete_receipt(receipt_id: str, user_id: str = Query(..., description="User ID")):
     """
-    Delete a receipt.
+    Delete a receipt and its associated file.
 
     Args:
         receipt_id: Receipt UUID
@@ -182,6 +204,7 @@ async def delete_receipt(receipt_id: str, user_id: str = Query(..., description=
     """
     try:
         supabase = get_supabase_client()
+        storage = StorageService()
 
         # Get the receipt first to verify ownership and get file path
         response = supabase.table('receipts').select('*').eq('id', receipt_id).eq(
@@ -192,19 +215,33 @@ async def delete_receipt(receipt_id: str, user_id: str = Query(..., description=
             raise HTTPException(status_code=404, detail="Receipt not found")
 
         receipt = response.data[0]
+        file_path = receipt.get('file_path')
 
         # Delete from database
         supabase.table('receipts').delete().eq('id', receipt_id).execute()
 
-        # TODO: Delete file from storage
-        # This would require extracting file path from file_url
-        # and calling storage.delete()
+        # Delete file from storage
+        if file_path:
+            storage.delete_file(file_path)
+            logger.info("Deleted receipt and file", extra={
+                "receipt_id": receipt_id,
+                "file_path": file_path
+            })
+        else:
+            logger.warning("Receipt had no file_path", extra={
+                "receipt_id": receipt_id
+            })
 
         return {"message": "Receipt deleted successfully", "id": receipt_id}
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Failed to delete receipt", extra={
+            "receipt_id": receipt_id,
+            "user_id": user_id,
+            "error": str(e)
+        }, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete receipt: {str(e)}"
@@ -251,25 +288,31 @@ async def get_receipt_stats(
         # Group by currency
         by_currency = {}
         for receipt in receipts:
-            amount = receipt.get('amount', 0) or 0
+            amount_str = receipt.get('amount')
             currency = receipt.get('currency', 'USD')
+
+            # Convert string to Decimal
+            try:
+                amount = Decimal(amount_str) if amount_str else Decimal('0')
+            except (ValueError, TypeError):
+                amount = Decimal('0')
 
             if currency not in by_currency:
                 by_currency[currency] = {
                     "count": 0,
-                    "total": 0,
-                    "average": 0
+                    "total": Decimal('0'),
+                    "average": Decimal('0')
                 }
 
             by_currency[currency]["count"] += 1
             by_currency[currency]["total"] += amount
 
-        # Calculate averages
+        # Calculate averages and convert to float for JSON
         for currency in by_currency:
             if by_currency[currency]["count"] > 0:
-                by_currency[currency]["average"] = round(
-                    by_currency[currency]["total"] / by_currency[currency]["count"], 2
-                )
+                avg = by_currency[currency]["total"] / by_currency[currency]["count"]
+                by_currency[currency]["average"] = float(round(avg, 2))
+                by_currency[currency]["total"] = float(round(by_currency[currency]["total"], 2))
 
         return {
             "total_count": total_count,
@@ -277,6 +320,10 @@ async def get_receipt_stats(
         }
 
     except Exception as e:
+        logger.error("Failed to fetch stats", extra={
+            "user_id": user_id,
+            "error": str(e)
+        }, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch stats: {str(e)}"

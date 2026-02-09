@@ -3,6 +3,10 @@
 Test critical parser fixes against the 4 main problem receipts.
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from app.services.parser import ReceiptParser
 from decimal import Decimal
 
@@ -13,7 +17,7 @@ def test_sephora():
     print("="*80)
     print("Expected: Amount=$59.52, Tax=$7.32 (GST $2.62 + HST $4.70)")
 
-    with open('failed_receipts/email_19c33910.txt') as f:
+    with open('documentation/failed_receipts/email_19c33910.txt') as f:
         text = f.read()
 
     parser = ReceiptParser()
@@ -45,7 +49,7 @@ def test_urban_outfitters():
     print("="*80)
     print("Expected: Amount=$93.79, Tax=$10.79")
 
-    with open('failed_receipts/email_19c33917.txt') as f:
+    with open('documentation/failed_receipts/email_19c33917.txt') as f:
         text = f.read()
 
     parser = ReceiptParser()
@@ -75,7 +79,7 @@ def test_psa_canada():
     print("="*80)
     print("Expected: Amount=$153.84, Tax=$18.89, Vendor=PSA Canada")
 
-    with open('failed_receipts/PSA_Canada.txt') as f:
+    with open('documentation/failed_receipts/PSA_Canada.txt') as f:
         text = f.read()
 
     parser = ReceiptParser()
@@ -107,7 +111,7 @@ def test_geoguessr():
     print("="*80)
     print("Expected: Amount=$6.99, Tax=$0.33, Date=2025-11-23, Vendor=GeoGuessr")
 
-    with open('failed_receipts/GeoGuessr.txt') as f:
+    with open('documentation/failed_receipts/GeoGuessr.txt') as f:
         text = f.read()
 
     parser = ReceiptParser()

@@ -1,14 +1,18 @@
 """
 Storage service for uploading files to Supabase Storage.
+Production-grade implementation with content-addressed paths and idempotent operations.
 """
 
 import hashlib
-import uuid
-from typing import Optional, Tuple
+import logging
+import re
+from typing import Tuple
 from pathlib import Path
 
 from app.config import settings
 from app.utils.supabase import get_supabase_client
+
+logger = logging.getLogger(__name__)
 
 
 class StorageService:
@@ -31,42 +35,66 @@ class StorageService:
         """
         return hashlib.sha256(file_data).hexdigest()
 
+    def _sanitize_filename(self, filename: str) -> str:
+        """
+        Sanitize filename for safe storage.
+
+        Args:
+            filename: Original filename
+
+        Returns:
+            Safe filename (alphanumeric, hyphens, underscores, dots only)
+        """
+        # Extract just the filename (no path components)
+        safe_name = Path(filename).name
+
+        # Replace unsafe characters with underscores
+        safe_name = re.sub(r'[^\w\-\.]', '_', safe_name)
+
+        # Collapse multiple underscores
+        safe_name = re.sub(r'_+', '_', safe_name)
+
+        return safe_name
+
     def generate_file_path(
         self,
         user_id: str,
-        filename: str,
-        receipt_id: Optional[str] = None
+        file_hash: str,
+        filename: str
     ) -> str:
         """
-        Generate storage path for a file.
+        Generate deterministic, content-addressed storage path.
+
+        Format: {user_id}/{hash[:2]}/{hash}/{safe_filename}
+
+        This ensures:
+        - Same content = same path (idempotent uploads)
+        - Hash prefix sharding reduces hot spots
+        - User isolation
 
         Args:
             user_id: User's UUID
-            filename: Original filename
-            receipt_id: Optional receipt UUID
+            file_hash: SHA-256 hash of file content
+            filename: Original filename (will be sanitized)
 
         Returns:
-            Storage path: {user_id}/{receipt_id}_{filename}
+            Storage path string
         """
-        if receipt_id is None:
-            receipt_id = str(uuid.uuid4())
+        safe_filename = self._sanitize_filename(filename)
 
-        # Sanitize filename
-        safe_filename = Path(filename).name
-
-        # Create path: user_id/receipt_id_filename
-        file_path = f"{user_id}/{receipt_id}_{safe_filename}"
+        # Content-addressed path with hash prefix sharding
+        file_path = f"{user_id}/{file_hash[:2]}/{file_hash}/{safe_filename}"
 
         return file_path
 
-    def upload_file(
+    def upload(
         self,
         file_data: bytes,
         file_path: str,
         mime_type: str = "application/octet-stream"
-    ) -> Optional[str]:
+    ) -> bool:
         """
-        Upload a file to Supabase Storage.
+        Upload a file to Supabase Storage with idempotent upsert.
 
         Args:
             file_data: Raw file bytes
@@ -74,86 +102,110 @@ class StorageService:
             mime_type: MIME type of the file
 
         Returns:
-            Public URL of uploaded file, or None if upload failed
+            True if upload succeeded, False otherwise
         """
         try:
-            # Upload to Supabase Storage
-            response = self.supabase.storage.from_(self.bucket_name).upload(
+            # Upload with upsert option (idempotent)
+            self.supabase.storage.from_(self.bucket_name).upload(
                 path=file_path,
                 file=file_data,
-                file_options={"content-type": mime_type}
+                file_options={
+                    "content-type": mime_type,
+                    "upsert": "true"
+                }
             )
 
-            # Get public URL (even though bucket is private, we store the path)
-            file_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
+            logger.debug("Uploaded file to storage", extra={
+                "file_path": file_path,
+                "size_bytes": len(file_data),
+                "mime_type": mime_type
+            })
 
-            return file_url
-
-        except Exception as e:
-            print(f"Error uploading file {file_path}: {str(e)}")
-            return None
-
-    def file_exists(self, file_path: str) -> bool:
-        """
-        Check if a file already exists in storage.
-
-        Args:
-            file_path: Path to check
-
-        Returns:
-            True if file exists, False otherwise
-        """
-        try:
-            # Try to get file metadata
-            files = self.supabase.storage.from_(self.bucket_name).list(
-                path=str(Path(file_path).parent)
-            )
-
-            filename = Path(file_path).name
-            return any(f['name'] == filename for f in files)
+            return True
 
         except Exception as e:
-            print(f"Error checking file existence: {str(e)}")
+            logger.error("Error uploading file", extra={
+                "file_path": file_path,
+                "error": str(e)
+            }, exc_info=True)
             return False
 
-    def upload_receipt_file(
+    def upload_receipt(
         self,
         user_id: str,
         filename: str,
         file_data: bytes,
-        mime_type: str,
-        receipt_id: Optional[str] = None
-    ) -> Tuple[Optional[str], str, str]:
+        mime_type: str
+    ) -> Tuple[str, str]:
         """
-        Upload a receipt file with automatic deduplication.
+        Upload a receipt file with automatic deduplication via content-addressed paths.
 
         Args:
             user_id: User's UUID
             filename: Original filename
             file_data: Raw file bytes
             mime_type: MIME type
-            receipt_id: Optional receipt UUID
 
         Returns:
-            Tuple of (file_url, file_hash, file_path)
+            Tuple of (file_hash, file_path)
+            Returns (None, None) if upload fails
         """
-        # Calculate file hash for deduplication
-        file_hash = self.calculate_file_hash(file_data)
+        try:
+            # Calculate hash for content-addressed storage
+            file_hash = self.calculate_file_hash(file_data)
 
-        # Check if file with same hash already exists in DB
-        # (This would require querying the receipts table)
-        # For now, we'll upload anyway and handle deduplication in the parser
+            # Generate deterministic path
+            file_path = self.generate_file_path(user_id, file_hash, filename)
 
-        # Generate file path
-        if receipt_id is None:
-            receipt_id = str(uuid.uuid4())
+            # Upload (idempotent upsert)
+            success = self.upload(file_data, file_path, mime_type)
 
-        file_path = self.generate_file_path(user_id, filename, receipt_id)
+            if not success:
+                return (None, None)
 
-        # Upload file
-        file_url = self.upload_file(file_data, file_path, mime_type)
+            return (file_hash, file_path)
 
-        return (file_url, file_hash, file_path)
+        except Exception as e:
+            logger.error("Error uploading receipt", extra={
+                "user_id": user_id,
+                "filename": filename,
+                "error": str(e)
+            }, exc_info=True)
+            return (None, None)
+
+    def signed_url(self, file_path: str, expires_in: int = 3600) -> str:
+        """
+        Generate a signed URL for temporary access to a private file.
+
+        Args:
+            file_path: Path to file in storage
+            expires_in: Expiration time in seconds (default 1 hour)
+
+        Returns:
+            Signed URL, or None if failed
+        """
+        try:
+            response = self.supabase.storage.from_(self.bucket_name).create_signed_url(
+                path=file_path,
+                expires_in=expires_in
+            )
+
+            signed_url = response.get('signedURL')
+
+            if not signed_url:
+                logger.warning("Signed URL generation returned empty", extra={
+                    "file_path": file_path
+                })
+                return None
+
+            return signed_url
+
+        except Exception as e:
+            logger.error("Error creating signed URL", extra={
+                "file_path": file_path,
+                "error": str(e)
+            }, exc_info=True)
+            return None
 
     def delete_file(self, file_path: str) -> bool:
         """
@@ -167,42 +219,12 @@ class StorageService:
         """
         try:
             self.supabase.storage.from_(self.bucket_name).remove([file_path])
+            logger.debug("Deleted file from storage", extra={"file_path": file_path})
             return True
 
         except Exception as e:
-            print(f"Error deleting file {file_path}: {str(e)}")
+            logger.error("Error deleting file", extra={
+                "file_path": file_path,
+                "error": str(e)
+            }, exc_info=True)
             return False
-
-    def get_file_url(self, file_path: str) -> str:
-        """
-        Get the URL for a file in storage.
-
-        Args:
-            file_path: Path to file
-
-        Returns:
-            URL to access the file
-        """
-        return self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
-
-    def create_signed_url(self, file_path: str, expires_in: int = 3600) -> Optional[str]:
-        """
-        Create a signed URL for temporary access to a private file.
-
-        Args:
-            file_path: Path to file
-            expires_in: Expiration time in seconds (default 1 hour)
-
-        Returns:
-            Signed URL or None if failed
-        """
-        try:
-            response = self.supabase.storage.from_(self.bucket_name).create_signed_url(
-                path=file_path,
-                expires_in=expires_in
-            )
-            return response.get('signedURL')
-
-        except Exception as e:
-            print(f"Error creating signed URL: {str(e)}")
-            return None

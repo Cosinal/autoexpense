@@ -1,10 +1,13 @@
 """
 Upload API router for direct file uploads.
+Production-grade implementation with new storage API and Decimal precision.
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
+from decimal import Decimal
 import uuid
+import logging
 
 from app.services.storage import StorageService
 from app.services.ocr import OCRService
@@ -12,6 +15,12 @@ from app.services.parser import ReceiptParser
 from app.utils.supabase import get_supabase_client
 
 router = APIRouter(prefix="/upload", tags=["upload"])
+logger = logging.getLogger(__name__)
+
+
+def _decimal_to_str(value: Optional[Decimal]) -> Optional[str]:
+    """Convert Decimal to string for database storage."""
+    return str(value) if value is not None else None
 
 
 @router.post("")
@@ -24,10 +33,10 @@ async def upload_receipt(
 
     This endpoint:
     1. Accepts file upload (PDF, JPG, PNG)
-    2. Stores file in Supabase Storage
+    2. Stores file in Supabase Storage with content-addressed path
     3. Runs OCR and parsing
     4. Creates receipt record
-    5. Returns parsed data
+    5. Returns parsed data with signed URL
 
     Args:
         file: Uploaded file
@@ -61,25 +70,56 @@ async def upload_receipt(
         parser = ReceiptParser()
         supabase = get_supabase_client()
 
-        # Generate receipt ID
-        receipt_id = str(uuid.uuid4())
-
-        # Upload file to storage
-        file_url, file_hash, file_path = storage.upload_receipt_file(
+        # Upload file to storage (content-addressed, idempotent)
+        file_hash, file_path = storage.upload_receipt(
             user_id=user_id,
             filename=file.filename or "uploaded_receipt",
             file_data=file_data,
-            mime_type=file.content_type or "application/octet-stream",
-            receipt_id=receipt_id
+            mime_type=file.content_type or "application/octet-stream"
         )
 
-        if not file_url:
+        if not file_path:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to upload file to storage"
             )
 
+        logger.info("File uploaded to storage", extra={
+            "user_id": user_id,
+            "filename": file.filename,
+            "file_hash": file_hash,
+            "file_path": file_path
+        })
+
+        # Check if receipt with this hash already exists (deduplication)
+        existing = supabase.table('receipts').select('id').eq(
+            'user_id', user_id
+        ).eq('file_hash', file_hash).limit(1).execute()
+
+        if existing.data:
+            receipt_id = existing.data[0]['id']
+            logger.info("Duplicate file detected, returning existing receipt", extra={
+                "receipt_id": receipt_id,
+                "file_hash": file_hash
+            })
+
+            # Get full receipt data
+            receipt_response = supabase.table('receipts').select('*').eq('id', receipt_id).execute()
+            receipt_data = receipt_response.data[0]
+
+            # Generate signed URL
+            signed_url = storage.signed_url(file_path, expires_in=3600)
+            if signed_url:
+                receipt_data['file_url'] = signed_url
+
+            return {
+                **receipt_data,
+                "message": "Receipt already exists (duplicate file)",
+                "duplicate": True
+            }
+
         # Run OCR
+        logger.debug("Running OCR on uploaded file")
         ocr_text = ocr.extract_and_normalize(
             file_data=file_data,
             mime_type=file.content_type or "application/octet-stream",
@@ -87,44 +127,62 @@ async def upload_receipt(
         )
 
         # Parse receipt data
+        logger.debug("Parsing receipt data")
         parsed_data = parser.parse(ocr_text)
 
         # Create receipt record in database
+        receipt_id = str(uuid.uuid4())
         receipt_data = {
             "id": receipt_id,
             "user_id": user_id,
+            "file_path": file_path,
+            "file_hash": file_hash,
+            "file_name": file.filename,
+            "mime_type": file.content_type,
             "vendor": parsed_data.get("vendor"),
-            "amount": float(parsed_data["amount"]) if parsed_data.get("amount") else None,
+            "amount": _decimal_to_str(parsed_data.get("amount")),
             "currency": parsed_data.get("currency", "USD"),
             "date": parsed_data.get("date"),
-            "tax": float(parsed_data["tax"]) if parsed_data.get("tax") else None,
-            "file_name": file.filename,
-            "file_url": file_url,
-            "file_hash": file_hash,
-            "mime_type": file.content_type,
+            "tax": _decimal_to_str(parsed_data.get("tax")),
+            "source_type": "upload",
+            "ingestion_debug": parsed_data.get("debug")
         }
 
         response = supabase.table('receipts').insert(receipt_data).execute()
 
         if not response.data:
+            # Cleanup orphaned file
+            storage.delete_file(file_path)
             raise HTTPException(
                 status_code=500,
                 detail="Failed to create receipt record"
             )
 
+        logger.info("Receipt created successfully", extra={
+            "receipt_id": receipt_id,
+            "vendor": parsed_data.get("vendor"),
+            "amount": parsed_data.get("amount")
+        })
+
         # Generate signed URL for response
-        signed_url = storage.create_signed_url(file_path, expires_in=3600)
+        signed_url = storage.signed_url(file_path, expires_in=3600)
         if signed_url:
             receipt_data['file_url'] = signed_url
 
         return {
             **receipt_data,
-            "message": "Receipt uploaded and processed successfully"
+            "message": "Receipt uploaded and processed successfully",
+            "duplicate": False
         }
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Upload failed", extra={
+            "user_id": user_id,
+            "filename": file.filename if file else None,
+            "error": str(e)
+        }, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Upload failed: {str(e)}"
@@ -149,16 +207,19 @@ async def upload_bulk_receipts(
     results = {
         "total": len(files),
         "successful": 0,
+        "duplicates": 0,
         "failed": 0,
         "receipts": [],
         "errors": []
     }
 
+    logger.info("Starting bulk upload", extra={
+        "user_id": user_id,
+        "file_count": len(files)
+    })
+
     for file in files:
         try:
-            # Process each file using the single upload endpoint logic
-            file_data = await file.read()
-
             # Validate file type
             allowed_types = ["application/pdf", "image/jpeg", "image/jpg", "image/png"]
             if file.content_type not in allowed_types:
@@ -169,30 +230,43 @@ async def upload_bulk_receipts(
                 results["failed"] += 1
                 continue
 
+            # Read file data
+            file_data = await file.read()
+
             # Initialize services
             storage = StorageService()
             ocr = OCRService()
             parser = ReceiptParser()
             supabase = get_supabase_client()
 
-            # Generate receipt ID
-            receipt_id = str(uuid.uuid4())
-
             # Upload file
-            file_url, file_hash, file_path = storage.upload_receipt_file(
+            file_hash, file_path = storage.upload_receipt(
                 user_id=user_id,
                 filename=file.filename or "uploaded_receipt",
                 file_data=file_data,
-                mime_type=file.content_type or "application/octet-stream",
-                receipt_id=receipt_id
+                mime_type=file.content_type or "application/octet-stream"
             )
 
-            if not file_url:
+            if not file_path:
                 results["errors"].append({
                     "filename": file.filename,
                     "error": "Storage upload failed"
                 })
                 results["failed"] += 1
+                continue
+
+            # Check for duplicate
+            existing = supabase.table('receipts').select('id').eq(
+                'user_id', user_id
+            ).eq('file_hash', file_hash).limit(1).execute()
+
+            if existing.data:
+                results["duplicates"] += 1
+                results["receipts"].append({
+                    "id": existing.data[0]['id'],
+                    "filename": file.filename,
+                    "duplicate": True
+                })
                 continue
 
             # Run OCR and parse
@@ -205,18 +279,21 @@ async def upload_bulk_receipts(
             parsed_data = parser.parse(ocr_text)
 
             # Create receipt record
+            receipt_id = str(uuid.uuid4())
             receipt_data = {
                 "id": receipt_id,
                 "user_id": user_id,
+                "file_path": file_path,
+                "file_hash": file_hash,
+                "file_name": file.filename,
+                "mime_type": file.content_type,
                 "vendor": parsed_data.get("vendor"),
-                "amount": float(parsed_data["amount"]) if parsed_data.get("amount") else None,
+                "amount": _decimal_to_str(parsed_data.get("amount")),
                 "currency": parsed_data.get("currency", "USD"),
                 "date": parsed_data.get("date"),
-                "tax": float(parsed_data["tax"]) if parsed_data.get("tax") else None,
-                "file_name": file.filename,
-                "file_url": file_url,
-                "file_hash": file_hash,
-                "mime_type": file.content_type,
+                "tax": _decimal_to_str(parsed_data.get("tax")),
+                "source_type": "upload",
+                "ingestion_debug": parsed_data.get("debug")
             }
 
             response = supabase.table('receipts').insert(receipt_data).execute()
@@ -227,9 +304,12 @@ async def upload_bulk_receipts(
                     "id": receipt_id,
                     "filename": file.filename,
                     "vendor": parsed_data.get("vendor"),
-                    "amount": parsed_data.get("amount")
+                    "amount": str(parsed_data.get("amount")) if parsed_data.get("amount") else None,
+                    "duplicate": False
                 })
             else:
+                # Cleanup orphaned file
+                storage.delete_file(file_path)
                 results["errors"].append({
                     "filename": file.filename,
                     "error": "Database insert failed"
@@ -237,10 +317,22 @@ async def upload_bulk_receipts(
                 results["failed"] += 1
 
         except Exception as e:
+            logger.error("Error processing file in bulk upload", extra={
+                "filename": file.filename,
+                "error": str(e)
+            }, exc_info=True)
             results["errors"].append({
                 "filename": file.filename,
                 "error": str(e)
             })
             results["failed"] += 1
+
+    logger.info("Bulk upload complete", extra={
+        "user_id": user_id,
+        "total": results["total"],
+        "successful": results["successful"],
+        "duplicates": results["duplicates"],
+        "failed": results["failed"]
+    })
 
     return results
