@@ -11,7 +11,7 @@ from datetime import datetime
 from app.services.email import EmailService
 from app.services.storage import StorageService
 from app.services.ocr import OCRService
-from app.services.parser import ReceiptParser
+from app.services.parser import ReceiptParser, ParseContext
 from app.utils.supabase import get_supabase_client
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,69 @@ class IngestionService:
             logger.warning("Error checking duplicate receipt", extra={
                 "user_id": user_id,
                 "file_hash": file_hash,
+                "error": str(e)
+            })
+            return False
+
+    def _check_semantic_duplicate(
+        self,
+        user_id: str,
+        vendor: Optional[str],
+        amount: Optional[Decimal],
+        date: Optional[str]
+    ) -> bool:
+        """
+        Check if a semantically identical receipt exists (same vendor + amount + date).
+
+        This catches cases where the same receipt is sent as multiple different files
+        (e.g., "Invoice.pdf" and "Receipt.pdf" with identical content but different PDFs).
+
+        Args:
+            user_id: User UUID
+            vendor: Vendor name
+            amount: Receipt amount
+            date: Receipt date (YYYY-MM-DD)
+
+        Returns:
+            True if semantic duplicate exists, False otherwise
+        """
+        # Need at least 2 of 3 fields to check for semantic duplicates
+        fields_present = sum([
+            vendor is not None,
+            amount is not None,
+            date is not None
+        ])
+
+        if fields_present < 2:
+            return False  # Not enough data to determine semantic duplicate
+
+        try:
+            # Build query
+            query = self.supabase.table('receipts').select('id').eq('user_id', user_id)
+
+            if vendor is not None:
+                query = query.eq('vendor', vendor)
+            if amount is not None:
+                query = query.eq('amount', str(amount))
+            if date is not None:
+                query = query.eq('date', date)
+
+            response = query.limit(1).execute()
+
+            if len(response.data) > 0:
+                logger.info("Found semantic duplicate", extra={
+                    "user_id": user_id,
+                    "vendor": vendor,
+                    "amount": str(amount) if amount else None,
+                    "date": date
+                })
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.warning("Error checking semantic duplicate", extra={
+                "user_id": user_id,
                 "error": str(e)
             })
             return False
@@ -149,7 +212,8 @@ class IngestionService:
                         filename=filename,
                         file_data=file_data,
                         mime_type=mime_type,
-                        file_hash=file_hash
+                        file_hash=file_hash,
+                        email_metadata=metadata
                     )
 
                     if receipt_id:
@@ -195,7 +259,8 @@ class IngestionService:
                                 file_data=body_bytes,
                                 mime_type='text/plain',
                                 file_hash=file_hash,
-                                pre_parsed_text=body_text
+                                pre_parsed_text=body_text,
+                                email_metadata=metadata
                             )
 
                             if receipt_id:
@@ -268,7 +333,8 @@ class IngestionService:
         file_data: bytes,
         mime_type: str,
         file_hash: str,
-        pre_parsed_text: Optional[str] = None
+        pre_parsed_text: Optional[str] = None,
+        email_metadata: Optional[Dict] = None
     ) -> Optional[str]:
         """
         Process a single receipt source (attachment or body).
@@ -332,11 +398,67 @@ class IngestionService:
                 # Still create receipt record with empty fields
                 parsed_data = {}
             else:
-                # Step 3: Parse receipt data
+                # Step 3: Parse receipt data with context hints
                 logger.debug("Parsing receipt data", extra={
                     "text_length": len(text)
                 })
-                parsed_data = self.parser.parse(text)
+
+                # Create ParseContext from email metadata
+                context = None
+                if email_metadata:
+                    # Extract sender domain and name from 'from' field
+                    # Format: "Name <email@domain.com>" or just "email@domain.com"
+                    sender_from = email_metadata.get('from', '')
+                    sender_domain = None
+                    sender_name = None
+
+                    if sender_from:
+                        # Extract email address
+                        import re
+                        email_match = re.search(r'<([^>]+)>|([^\s<>]+@[^\s<>]+)', sender_from)
+                        if email_match:
+                            email_addr = email_match.group(1) or email_match.group(2)
+                            if '@' in email_addr:
+                                sender_domain = email_addr.split('@')[1]
+
+                        # Extract name (text before <email>)
+                        name_match = re.match(r'([^<]+)\s*<', sender_from)
+                        if name_match:
+                            sender_name = name_match.group(1).strip().strip('"')
+                        elif not email_match:
+                            # No email format, treat whole thing as name
+                            sender_name = sender_from.strip()
+
+                    context = ParseContext(
+                        sender_domain=sender_domain,
+                        sender_name=sender_name,
+                        subject=email_metadata.get('subject'),
+                        user_locale=None,  # TODO: Get from user preferences
+                        user_currency=None,  # TODO: Get from user preferences
+                        billing_country=None  # TODO: Get from user profile
+                    )
+
+                parsed_data = self.parser.parse(text, context=context)
+
+            # Step 3.5: Check for semantic duplicates (same vendor + amount + date)
+            # This catches cases like "Invoice.pdf" and "Receipt.pdf" that are different files
+            # but represent the same transaction
+            if parsed_data:
+                is_semantic_duplicate = self._check_semantic_duplicate(
+                    user_id=user_id,
+                    vendor=parsed_data.get('vendor'),
+                    amount=parsed_data.get('amount'),
+                    date=parsed_data.get('date')
+                )
+
+                if is_semantic_duplicate:
+                    logger.info("Skipping semantic duplicate receipt", extra={
+                        "vendor": parsed_data.get('vendor'),
+                        "amount": str(parsed_data.get('amount')) if parsed_data.get('amount') else None,
+                        "date": parsed_data.get('date'),
+                        "filename": filename
+                    })
+                    return None  # Skip this receipt
 
             # Step 4: Create receipt record (UPSERT with UNIQUE constraint on file_hash)
             receipt_id = self._upsert_receipt_record(
@@ -406,6 +528,64 @@ class IngestionService:
             Receipt ID if successful, None otherwise
         """
         try:
+            # Smart currency defaulting with provenance tracking
+            currency = parsed_data.get('currency')
+            currency_source = 'parsed'
+
+            if currency is None:
+                # No currency detected by parser - use smart defaulting
+                # TODO: Check user preferences (billing_country, preferred_currency)
+                # For now, default to USD
+                currency = 'USD'
+                currency_source = 'defaulted_to_usd'
+
+                # Record warning in debug metadata
+                debug = parsed_data.get('debug', {})
+                if 'warnings' not in debug:
+                    debug['warnings'] = []
+                debug['warnings'].append(f'Currency defaulted to {currency} (no strong evidence found)')
+                parsed_data['debug'] = debug
+
+                logger.debug("Currency defaulted", extra={
+                    'source': currency_source,
+                    'currency': currency
+                })
+
+            # Record currency source in debug metadata
+            if parsed_data.get('debug'):
+                parsed_data['debug']['currency_source'] = currency_source
+
+            # Review flagging for low-confidence receipts
+            confidence = parsed_data.get('confidence', 0.0)
+            needs_review = False
+            review_reason = None
+
+            if confidence < 0.7:
+                needs_review = True
+                reasons = []
+
+                # Determine specific reasons for review
+                if not parsed_data.get('vendor'):
+                    reasons.append('missing vendor')
+                if not parsed_data.get('amount'):
+                    reasons.append('missing amount')
+                if not parsed_data.get('date'):
+                    reasons.append('missing date')
+                if currency_source == 'defaulted_to_usd':
+                    reasons.append('defaulted currency')
+                if confidence < 0.5:
+                    reasons.append(f'low confidence ({confidence:.2f})')
+                elif confidence < 0.7:
+                    reasons.append(f'medium confidence ({confidence:.2f})')
+
+                review_reason = '; '.join(reasons) if reasons else 'low confidence extraction'
+
+                logger.info("Receipt flagged for review", extra={
+                    'confidence': confidence,
+                    'reason': review_reason,
+                    'file_name': file_name
+                })
+
             # Build receipt data (preserving Decimal precision)
             receipt_data = {
                 'user_id': user_id,
@@ -418,9 +598,11 @@ class IngestionService:
                 'attachment_index': attachment_index,
                 'vendor': parsed_data.get('vendor'),
                 'amount': self._decimal_to_str(parsed_data.get('amount')),
-                'currency': parsed_data.get('currency', 'USD'),
+                'currency': currency,
                 'date': parsed_data.get('date'),
                 'tax': self._decimal_to_str(parsed_data.get('tax')),
+                'needs_review': needs_review,
+                'review_reason': review_reason,
                 'ingestion_debug': parsed_data.get('debug')
             }
 

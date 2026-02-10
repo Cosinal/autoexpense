@@ -11,7 +11,7 @@ import logging
 
 from app.services.storage import StorageService
 from app.services.ocr import OCRService
-from app.services.parser import ReceiptParser
+from app.services.parser import ReceiptParser, ParseContext
 from app.utils.supabase import get_supabase_client
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -126,9 +126,59 @@ async def upload_receipt(
             filename=file.filename or ""
         )
 
-        # Parse receipt data
+        # Parse receipt data (no email context for direct uploads)
         logger.debug("Parsing receipt data")
-        parsed_data = parser.parse(ocr_text)
+        parsed_data = parser.parse(ocr_text, context=None)
+
+        # Smart currency defaulting with provenance tracking
+        currency = parsed_data.get("currency")
+        currency_source = "parsed"
+
+        if currency is None:
+            # No currency detected - use smart defaulting
+            # TODO: Check user preferences
+            currency = "USD"
+            currency_source = "defaulted_to_usd"
+
+            # Record warning in debug
+            debug = parsed_data.get("debug", {})
+            if "warnings" not in debug:
+                debug["warnings"] = []
+            debug["warnings"].append(f"Currency defaulted to {currency} (no strong evidence found)")
+            parsed_data["debug"] = debug
+
+            logger.debug("Currency defaulted", extra={
+                "source": currency_source,
+                "currency": currency
+            })
+
+        # Record currency source in debug
+        if parsed_data.get("debug"):
+            parsed_data["debug"]["currency_source"] = currency_source
+
+        # Review flagging for low-confidence receipts
+        confidence = parsed_data.get("confidence", 0.0)
+        needs_review = False
+        review_reason = None
+
+        if confidence < 0.7:
+            needs_review = True
+            reasons = []
+
+            if not parsed_data.get("vendor"):
+                reasons.append("missing vendor")
+            if not parsed_data.get("amount"):
+                reasons.append("missing amount")
+            if not parsed_data.get("date"):
+                reasons.append("missing date")
+            if currency_source == "defaulted_to_usd":
+                reasons.append("defaulted currency")
+            if confidence < 0.5:
+                reasons.append(f"low confidence ({confidence:.2f})")
+            elif confidence < 0.7:
+                reasons.append(f"medium confidence ({confidence:.2f})")
+
+            review_reason = "; ".join(reasons) if reasons else "low confidence extraction"
 
         # Create receipt record in database
         receipt_id = str(uuid.uuid4())
@@ -141,9 +191,11 @@ async def upload_receipt(
             "mime_type": file.content_type,
             "vendor": parsed_data.get("vendor"),
             "amount": _decimal_to_str(parsed_data.get("amount")),
-            "currency": parsed_data.get("currency", "USD"),
+            "currency": currency,
             "date": parsed_data.get("date"),
             "tax": _decimal_to_str(parsed_data.get("tax")),
+            "needs_review": needs_review,
+            "review_reason": review_reason,
             "source_type": "upload",
             "ingestion_debug": parsed_data.get("debug")
         }
@@ -276,7 +328,52 @@ async def upload_bulk_receipts(
                 filename=file.filename or ""
             )
 
-            parsed_data = parser.parse(ocr_text)
+            parsed_data = parser.parse(ocr_text, context=None)
+
+            # Smart currency defaulting with provenance tracking
+            currency = parsed_data.get("currency")
+            currency_source = "parsed"
+
+            if currency is None:
+                # No currency detected - use smart defaulting
+                # TODO: Check user preferences
+                currency = "USD"
+                currency_source = "defaulted_to_usd"
+
+                # Record warning in debug
+                debug = parsed_data.get("debug", {})
+                if "warnings" not in debug:
+                    debug["warnings"] = []
+                debug["warnings"].append(f"Currency defaulted to {currency} (no strong evidence found)")
+                parsed_data["debug"] = debug
+
+            # Record currency source in debug
+            if parsed_data.get("debug"):
+                parsed_data["debug"]["currency_source"] = currency_source
+
+            # Review flagging for low-confidence receipts
+            confidence = parsed_data.get("confidence", 0.0)
+            needs_review = False
+            review_reason = None
+
+            if confidence < 0.7:
+                needs_review = True
+                reasons = []
+
+                if not parsed_data.get("vendor"):
+                    reasons.append("missing vendor")
+                if not parsed_data.get("amount"):
+                    reasons.append("missing amount")
+                if not parsed_data.get("date"):
+                    reasons.append("missing date")
+                if currency_source == "defaulted_to_usd":
+                    reasons.append("defaulted currency")
+                if confidence < 0.5:
+                    reasons.append(f"low confidence ({confidence:.2f})")
+                elif confidence < 0.7:
+                    reasons.append(f"medium confidence ({confidence:.2f})")
+
+                review_reason = "; ".join(reasons) if reasons else "low confidence extraction"
 
             # Create receipt record
             receipt_id = str(uuid.uuid4())
@@ -289,9 +386,11 @@ async def upload_bulk_receipts(
                 "mime_type": file.content_type,
                 "vendor": parsed_data.get("vendor"),
                 "amount": _decimal_to_str(parsed_data.get("amount")),
-                "currency": parsed_data.get("currency", "USD"),
+                "currency": currency,
                 "date": parsed_data.get("date"),
                 "tax": _decimal_to_str(parsed_data.get("tax")),
+                "needs_review": needs_review,
+                "review_reason": review_reason,
                 "source_type": "upload",
                 "ingestion_debug": parsed_data.get("debug")
             }

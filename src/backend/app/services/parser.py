@@ -5,9 +5,31 @@ Receipt parser service for extracting structured data from OCR text.
 import re
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+
+from app.utils.money import parse_money, MoneyFormat
+from app.utils.candidates import (
+    AmountCandidate,
+    DateCandidate,
+    VendorCandidate,
+    CurrencyCandidate,
+    create_amount_candidate,
+    create_vendor_candidate,
+    create_date_candidate,
+    create_currency_candidate,
+)
+from app.utils.scoring import (
+    select_best_amount,
+    select_best_vendor,
+    select_best_date,
+    select_best_currency,
+    select_top_amounts,
+    select_top_vendors,
+    select_top_dates,
+    select_top_currencies,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +49,24 @@ class PatternSpec:
         object.__setattr__(self, 'compiled', re.compile(self.pattern, self.flags))
 
 
+@dataclass
+class ParseContext:
+    """
+    Context object carrying metadata hints from upstream to the parser.
+
+    These hints improve parsing accuracy without hardcoding vendor-specific logic.
+    All fields are optional and can be None.
+    """
+    sender_domain: Optional[str] = None  # Email sender domain (e.g., "sephora.com")
+    sender_name: Optional[str] = None    # Email sender display name
+    subject: Optional[str] = None        # Email subject line
+    user_locale: Optional[str] = None    # User's locale hint (e.g., "US", "EU")
+    user_currency: Optional[str] = None  # User's preferred currency (e.g., "USD")
+    billing_country: Optional[str] = None  # User's billing country if known
+
+
 class ReceiptParser:
     """Service for parsing receipt text and extracting structured data."""
-
-    # Known payment processors (value is the normalized name)
-    PAYMENT_PROCESSORS = {
-        'paddle.com market ltd': 'paddle',
-        'paddle.com': 'paddle',
-        'paddle': 'paddle',
-        'market ltd': 'paddle',  # GeoGuessr case
-        'stripe': 'stripe',
-        'square': 'square',
-        'paypal': 'paypal',
-    }
 
     def __init__(self):
         """Initialize parser with regex patterns."""
@@ -256,26 +283,6 @@ class ReceiptParser:
             ),
         ]
 
-        # Known vendor patterns (pre-compiled)
-        self.known_vendor_patterns = [
-            (re.compile(r'\buber\b', re.IGNORECASE), 'Uber'),
-            (re.compile(r'\bamazon\b', re.IGNORECASE), 'Amazon'),
-            (re.compile(r'\bairbnb\b', re.IGNORECASE), 'Airbnb'),
-            (re.compile(r'\blyft\b', re.IGNORECASE), 'Lyft'),
-            (re.compile(r'\bdoordash\b', re.IGNORECASE), 'DoorDash'),
-            (re.compile(r'\bgrubhub\b', re.IGNORECASE), 'Grubhub'),
-            (re.compile(r'\bskip\s*the\s*dishes\b', re.IGNORECASE), 'Skip The Dishes'),
-            (re.compile(r'\bair\s*canada\b', re.IGNORECASE), 'Air Canada'),
-            (re.compile(r'\bwestjet\b', re.IGNORECASE), 'WestJet'),
-            (re.compile(r'\bapple\b', re.IGNORECASE), 'Apple'),
-            (re.compile(r'\bwalmart\b', re.IGNORECASE), 'Walmart'),
-            (re.compile(r'\btarget\b', re.IGNORECASE), 'Target'),
-            (re.compile(r'\bstarbucks\b', re.IGNORECASE), 'Starbucks'),
-            (re.compile(r'\bmcdonald', re.IGNORECASE), "McDonald's"),
-            (re.compile(r'\bpsa\s+submission\b', re.IGNORECASE), 'PSA Canada'),
-            (re.compile(r'\bpsacanada@', re.IGNORECASE), 'PSA Canada'),
-        ]
-
         # Email skip patterns (pre-compiled)
         self.email_skip_patterns = [
             re.compile(r'^\s*[-=]+\s*forwarded\s+message\s*[-=]+', re.IGNORECASE),
@@ -305,22 +312,33 @@ class ReceiptParser:
             'CAD': 'CAD',
         }
 
-    def parse(self, text: str) -> Dict[str, Any]:
+    def parse(self, text: str, context: Optional[ParseContext] = None) -> Dict[str, Any]:
         """
         Parse receipt text and extract all available fields.
 
         Args:
             text: OCR-extracted text from receipt
+            context: Optional context with email metadata hints
 
         Returns:
-            Dictionary with parsed fields
+            Dictionary with parsed fields and candidate options for review
         """
-        debug = {'patterns_matched': {}, 'confidence_per_field': {}, 'warnings': []}
+        # Normalize OCR spacing issues globally before parsing
+        # Handles cases like "O c t o b e r 2 6" → "October 26"
+        text = self._normalize_ocr_spaces(text)
+
+        debug = {
+            'patterns_matched': {},
+            'confidence_per_field': {},
+            'warnings': [],
+            'review_candidates': {}  # Top candidates for manual review
+        }
+
         result = {
-            'vendor': self.extract_vendor(text, _debug=debug),
-            'amount': self.extract_amount(text, _debug=debug),
-            'currency': self.extract_currency(text, _debug=debug),
-            'date': self.extract_date(text, _debug=debug),
+            'vendor': self.extract_vendor(text, context=context, _debug=debug),
+            'amount': self.extract_amount(text, context=context, _debug=debug),
+            'currency': self.extract_currency(text, context=context, _debug=debug),
+            'date': self.extract_date(text, context=context, _debug=debug),
             'tax': self.extract_tax(text, _debug=debug),
             'confidence': 0.0,
             'debug': debug,
@@ -328,7 +346,65 @@ class ReceiptParser:
 
         result['confidence'] = self._calculate_confidence(result)
 
+        # Capture top candidates for fields that need review (confidence < 0.7)
+        self._capture_review_candidates(text, context, result, debug)
+
         return result
+
+    def _capture_review_candidates(
+        self,
+        text: str,
+        context: Optional[ParseContext],
+        result: Dict[str, Any],
+        debug: Dict[str, Any]
+    ) -> None:
+        """
+        Capture top 3 candidates for each field to present in review UI.
+
+        Only captures candidates for fields with low confidence that need review.
+        """
+        review_candidates = {}
+
+        # Check each field's confidence
+        confidence_per_field = debug.get('confidence_per_field', {})
+
+        # Vendor candidates (if confidence < 0.7)
+        vendor_conf = confidence_per_field.get('vendor', 0.0)
+        if vendor_conf < 0.7 and 'vendor_candidates' in debug:
+            review_candidates['vendor'] = {
+                'current_value': result.get('vendor'),
+                'confidence': vendor_conf,
+                'options': debug['vendor_candidates']  # Top 3 from extract_vendor
+            }
+
+        # Amount candidates (if confidence < 0.7)
+        amount_conf = confidence_per_field.get('amount', 0.0)
+        if amount_conf < 0.7 and 'amount_candidates' in debug:
+            review_candidates['amount'] = {
+                'current_value': str(result.get('amount')) if result.get('amount') else None,
+                'confidence': amount_conf,
+                'options': debug['amount_candidates']  # Top 3 from extract_amount
+            }
+
+        # Date candidates (if confidence < 0.7)
+        date_conf = confidence_per_field.get('date', 0.0)
+        if date_conf < 0.7 and 'date_candidates' in debug:
+            review_candidates['date'] = {
+                'current_value': result.get('date'),
+                'confidence': date_conf,
+                'options': debug['date_candidates']  # Top 3 from extract_date
+            }
+
+        # Currency candidates (if confidence < 0.7)
+        currency_conf = confidence_per_field.get('currency', 0.0)
+        if currency_conf < 0.7 and 'currency_candidates' in debug:
+            review_candidates['currency'] = {
+                'current_value': result.get('currency'),
+                'confidence': currency_conf,
+                'options': debug['currency_candidates']  # Top 3 from extract_currency
+            }
+
+        debug['review_candidates'] = review_candidates
 
     def _normalize_ocr_spaces(self, text: str) -> str:
         """
@@ -344,27 +420,59 @@ class ReceiptParser:
                 text = new_text
         return text
 
-    def extract_vendor(self, text: str, _debug=None) -> Optional[str]:
+    def extract_vendor(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[str]:
         """
-        Extract vendor/merchant name from receipt text.
-        Works for both physical receipts and email receipts.
+        Extract vendor/merchant name using structural scoring (no hardcoded vendor lists).
 
         Args:
             text: Receipt text
+            context: Optional parse context with email metadata
 
         Returns:
             Vendor name or None
         """
         try:
-            # Normalize OCR spacing for header lines only
-            lines = text.split('\n')
-            header_lines = lines[:15]
-            normalized_header = '\n'.join(self._normalize_ocr_spaces(line) for line in header_lines)
-            text = normalized_header + ('\n' + '\n'.join(lines[15:]) if len(lines) > 15 else '')
+            candidates: List[VendorCandidate] = []
+
+            # Text is already normalized by parse() method
             lines = text.split('\n')
 
-            # First, try to extract from email "From:" field if present
-            for line in lines[:15]:
+            # Strategy 1: Use ParseContext email metadata (highest confidence)
+            if context:
+                if context.sender_name:
+                    cleaned = self._clean_vendor_name(context.sender_name)
+                    if cleaned and len(cleaned) > 2:
+                        # Remove generic terms
+                        cleaned = re.sub(r'\b(receipts?|notifications?|noreply|no-reply)\b', '', cleaned, flags=re.IGNORECASE).strip()
+                        if cleaned and len(cleaned) > 2:
+                            candidate = create_vendor_candidate(
+                                value=cleaned,
+                                pattern_name='context_sender_name',
+                                match_span=(0, 0),
+                                raw_text=context.sender_name,
+                                line_position=0,
+                                from_email_header=True
+                            )
+                            candidates.append(candidate)
+
+                if context.subject:
+                    # Extract potential vendor from subject
+                    subject_match = re.search(r'(?:receipt|order|confirmation).*?(?:from|at)\s+([A-Z][a-zA-Z\s]{2,30})', context.subject, re.IGNORECASE)
+                    if subject_match:
+                        cleaned = self._clean_vendor_name(subject_match.group(1))
+                        if cleaned and len(cleaned) > 2:
+                            candidate = create_vendor_candidate(
+                                value=cleaned,
+                                pattern_name='context_subject',
+                                match_span=(0, 0),
+                                raw_text=context.subject,
+                                line_position=0,
+                                from_subject=True
+                            )
+                            candidates.append(candidate)
+
+            # Strategy 2: Extract from email "From:" field if present in text
+            for line_idx, line in enumerate(lines[:15]):
                 if line.strip().lower().startswith('from:'):
                     match = re.search(r'from:\s*\*?\*?([^<\*]+?)[\*\s]*(?:<|$)', line, re.IGNORECASE)
                     if match:
@@ -372,42 +480,103 @@ class ReceiptParser:
                         if vendor and len(vendor) > 2:
                             vendor = re.sub(r'\b(receipts?|notifications?|noreply|no-reply)\b', '', vendor, flags=re.IGNORECASE).strip()
                             if vendor and len(vendor) > 2:
-                                if _debug is not None:
-                                    _debug['patterns_matched']['vendor'] = 'from_header'
-                                    _debug['confidence_per_field']['vendor'] = 0.9
-                                return vendor
+                                candidate = create_vendor_candidate(
+                                    value=vendor,
+                                    pattern_name='from_header_in_text',
+                                    match_span=(0, len(line)),
+                                    raw_text=line,
+                                    line_position=line_idx,
+                                    from_email_header=True
+                                )
+                                candidates.append(candidate)
 
-            # Check for known vendors in the entire text
-            for compiled, name in self.known_vendor_patterns:
-                if compiled.search(text):
-                    if _debug is not None:
-                        _debug['patterns_matched']['vendor'] = f'known_vendor:{name}'
-                        _debug['confidence_per_field']['vendor'] = 0.95
-                    return name
+            # Strategy 3: Look for "payable to" or "make cheques payable to" (high confidence)
+            for line_idx, line in enumerate(lines[:50]):
+                match = re.search(r'(?:make\s+)?(?:cheques?|checks?)\s+payable\s+to\s+([A-Z][A-Z\s]+?)(?:\s+and|$|\.|,)', line, re.IGNORECASE)
+                if match:
+                    vendor = self._clean_vendor_name(match.group(1))
+                    if vendor and len(vendor) > 3:
+                        candidate = create_vendor_candidate(
+                            value=vendor,
+                            pattern_name='payable_to',
+                            match_span=match.span(1),
+                            raw_text=line,
+                            line_position=line_idx
+                        )
+                        candidates.append(candidate)
 
-            # Prioritize lines with company indicators (Inc, LLC, etc.)
-            for line in lines[:30]:
+            # Strategy 4: Look for business-type keywords (medical, retail, services)
+            # These indicate a business entity even without legal suffix
+            business_keywords = ['Clinic', 'Medical', 'Eyeware', 'Eyecare', 'Optometry', 'Optical', 'Pharmacy', 'Restaurant', 'Cafe', 'Shop', 'Store', 'Hotel', 'Spa', 'Salon']
+            for line_idx, line in enumerate(lines[:30]):
+                for keyword in business_keywords:
+                    if keyword in line:
+                        # Extract business name around the keyword (up to 60 chars total)
+                        # Pattern: Look for capital letters before keyword, then keyword, then rest of name
+                        pattern = rf'([A-Z][a-zA-Z\s&-]{{0,40}}{keyword}(?:\s+&\s+[A-Z][a-zA-Z]+)?(?:\s*\([^)]+\))?)'
+                        match = re.search(pattern, line)
+                        if match:
+                            vendor = self._clean_vendor_name(match.group(1))
+                            if vendor and len(vendor) > 3:
+                                # Remove person name patterns (FirstName LastNameBusinessName)
+                                # If vendor starts with two capitalized words before business keyword, remove first two
+                                words_before_keyword = vendor[:vendor.find(keyword)].strip().split()
+                                if len(words_before_keyword) >= 2:
+                                    # Check if first two words look like person name (both short, capitalized)
+                                    if all(len(w) < 10 and w[0].isupper() for w in words_before_keyword[:2]):
+                                        # Remove the first two words (likely person name)
+                                        vendor = vendor[vendor.find(words_before_keyword[-1]):]
+
+                                # Verify it's not part of patient/customer info
+                                context_start = max(0, match.start() - 100)
+                                context = line[context_start:match.start()].lower()
+                                if 'bill to' not in context and 'patient' not in context:
+                                    candidate = create_vendor_candidate(
+                                        value=vendor,
+                                        pattern_name='business_keyword',
+                                        match_span=match.span(1),
+                                        raw_text=line,
+                                        line_position=line_idx
+                                    )
+                                    candidates.append(candidate)
+                                    break  # Found vendor with this keyword, stop checking other keywords
+
+            # Strategy 5: Look for company suffixes (structural scoring)
+            for line_idx, line in enumerate(lines[:30]):
                 match = re.search(r'([A-Z][a-zA-Z\s]{2,60}?(?:Incorporated|Inc|LLC|Ltd|Limited|Corp|Corporation|Labs))', line)
                 if match:
                     vendor = self._clean_vendor_name(match.group(1))
                     if vendor and len(vendor) > 5:
-                        vendor_lower = vendor.lower()
-                        if vendor_lower in self.PAYMENT_PROCESSORS:
-                            real_merchant = self._extract_real_merchant(text)
-                            if real_merchant:
-                                logger.debug("Payment processor detected: %s -> %s", vendor, real_merchant)
-                                if _debug is not None:
-                                    _debug['patterns_matched']['vendor'] = 'payment_processor_real_merchant'
-                                    _debug['confidence_per_field']['vendor'] = 0.8
-                                return real_merchant
-                        if _debug is not None:
-                            _debug['patterns_matched']['vendor'] = 'company_indicator'
-                            _debug['confidence_per_field']['vendor'] = 0.85
-                        return vendor
+                        candidate = create_vendor_candidate(
+                            value=vendor,
+                            pattern_name='company_suffix',
+                            match_span=(match.start(), match.end()),
+                            raw_text=match.group(0),
+                            line_position=line_idx
+                        )
+                        candidates.append(candidate)
 
-            # Fallback: Try to find vendor in first few non-header lines
-            for line in lines[:20]:
+            # Strategy 4: Fallback to early lines with structural filtering
+            # Track if we're in a customer/bill-to section to avoid picking up customer name
+            in_customer_section = False
+            customer_section_end_line = -1
+
+            for line_idx, line in enumerate(lines[:20]):
                 line = line.strip()
+
+                # Detect customer/bill-to section start
+                if re.search(r'\b(BILL\s+TO|CUSTOMER|SOLD\s+TO|SHIP\s+TO)\b', line, re.IGNORECASE):
+                    in_customer_section = True
+                    customer_section_end_line = line_idx + 5  # Skip next 5 lines after this marker
+                    continue
+
+                # Skip lines in customer section (customer name/address)
+                if in_customer_section and line_idx <= customer_section_end_line:
+                    continue
+
+                # Reset customer section flag after we've passed it
+                if line_idx > customer_section_end_line:
+                    in_customer_section = False
 
                 # Skip email forwarding headers
                 skip_line = False
@@ -428,68 +597,91 @@ class ReceiptParser:
                 if re.match(r'^\d+\.?\d*$', line):
                     continue
 
-                skip_words = ['receipt', 'invoice', 'bill', 'order', 'thanks', 'thank you', 'trip', 'ride', 'booking']
-                if line.lower() in skip_words:
+                skip_words = ['receipt', 'invoice', 'bill', 'order', 'thanks', 'thank you', 'trip', 'ride', 'booking', 'tax invoice', 'paid']
+                if line.lower().strip() in skip_words:
+                    continue
+
+                # Skip lines that look like table headers (multiple capitalized words or common headers)
+                # e.g., "BALANCE DUE DATE INVOICE NO", "Date Description Practitioner"
+                if len(line.split()) >= 3 and line.isupper():
+                    continue
+
+                # Skip common invoice table headers (case-insensitive)
+                lower_line = line.lower()
+                table_header_patterns = [
+                    'code description price',
+                    'item description quantity',
+                    'description qty price',
+                    'date description practitioner'
+                ]
+                if any(pattern in lower_line for pattern in table_header_patterns):
+                    continue
+
+                # Skip lines that look like addresses (postal codes, state/province codes)
+                # Canadian: A1A 1A1
+                if re.search(r'\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b', line, re.IGNORECASE):
+                    continue
+                # UK: EC1V 8BT
+                if re.search(r'\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b', line):
+                    continue
+                # US ZIP: 12345 or 12345-6789
+                if re.search(r'\b\d{5}(?:-\d{4})?\b', line):
+                    continue
+
+                # Skip lines that look like dates
+                if re.search(r'\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]{3,9}\s+\d{4}', line):
+                    continue
+                if re.search(r'[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}', line):
                     continue
 
                 vendor = self._clean_vendor_name(line)
                 if vendor and len(vendor) > 2:
                     generic_phrases = ['your order', 'your trip', 'your receipt', 'your booking']
                     if vendor.lower() not in generic_phrases:
-                        vendor_lower = vendor.lower()
-                        if vendor_lower in self.PAYMENT_PROCESSORS:
-                            real_merchant = self._extract_real_merchant(text)
-                            if real_merchant:
-                                logger.debug("Payment processor detected: %s -> %s", vendor, real_merchant)
-                                if _debug is not None:
-                                    _debug['patterns_matched']['vendor'] = 'payment_processor_real_merchant'
-                                    _debug['confidence_per_field']['vendor'] = 0.8
-                                return real_merchant
-                        if _debug is not None:
-                            _debug['patterns_matched']['vendor'] = 'fallback_first_line'
-                            _debug['confidence_per_field']['vendor'] = 0.5
-                        return vendor
+                        candidate = create_vendor_candidate(
+                            value=vendor,
+                            pattern_name='early_line',
+                            match_span=(0, len(line)),
+                            raw_text=line,
+                            line_position=line_idx
+                        )
+                        candidates.append(candidate)
+
+            # Select best candidate using structural scoring
+            best = select_best_vendor(candidates)
+
+            if best:
+                # Record provenance in debug
+                if _debug is not None:
+                    _debug['patterns_matched']['vendor'] = best.pattern_name
+                    # Confidence based on source
+                    if best.from_email_header:
+                        _debug['confidence_per_field']['vendor'] = 0.9
+                    elif best.from_subject:
+                        _debug['confidence_per_field']['vendor'] = 0.7
+                    elif best.has_company_suffix:
+                        _debug['confidence_per_field']['vendor'] = 0.8
+                    else:
+                        _debug['confidence_per_field']['vendor'] = 0.5
+
+                    # Capture top 3 candidates for review UI
+                    top_3 = select_top_vendors(candidates, top_n=3)
+                    _debug['vendor_candidates'] = [
+                        {
+                            'value': c.value,
+                            'score': round(score, 2),
+                            'pattern': c.pattern_name
+                        }
+                        for c, score in top_3
+                    ]
+
+                return best.value
 
             return None
 
         except (re.error, AttributeError, IndexError):
             logger.warning("Error extracting vendor", exc_info=True)
             return None
-
-    def _extract_real_merchant(self, text: str) -> Optional[str]:
-        """
-        Extract actual merchant when vendor is a payment processor.
-
-        Args:
-            text: Receipt text
-
-        Returns:
-            Real merchant name or None
-        """
-        statement_match = re.search(
-            r'statement\s+as:\s*\n?\s*([A-Z][A-Z0-9\s\.\*]+?)(?:\n|$)',
-            text,
-            re.IGNORECASE | re.MULTILINE
-        )
-        if statement_match:
-            statement = statement_match.group(1).strip()
-            parts = re.split(r'[\*\s]{2,}', statement)
-            for part in reversed(parts):
-                if len(part) > 2 and part.upper() not in ['NET', 'COM', 'INC', 'PADDLE']:
-                    return part.strip().title()
-
-        product_match = re.search(
-            r'(?:Product|Description|Item)\s*\n\s*([A-Z][a-zA-Z\s]{2,30}?)(?:\s+(?:Unlimited|Subscription|Pro|Monthly|Annual|Premium)|$)',
-            text,
-            re.MULTILINE
-        )
-        if product_match:
-            product_name = product_match.group(1).strip()
-            product_name = re.sub(r'\s+(Unlimited|Subscription|Pro|Monthly|Annual|Premium)$', '', product_name, flags=re.IGNORECASE)
-            if len(product_name) > 2:
-                return product_name
-
-        return None
 
     def _clean_vendor_name(self, name: str) -> str:
         """Clean and format vendor name."""
@@ -501,63 +693,78 @@ class ReceiptParser:
             name = ' '.join(words[:6])
         return name.strip()
 
-    def extract_amount(self, text: str, _debug=None) -> Optional[Decimal]:
+    def extract_amount(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[Decimal]:
         """
-        Extract total amount from receipt using priority-based matching.
+        Extract total amount from receipt using candidate-based scoring.
 
         Args:
             text: Receipt text
+            context: Optional parse context with email metadata
 
         Returns:
             Amount as Decimal or None
         """
         try:
+            candidates: List[AmountCandidate] = []
+
+            # Generate candidates from all patterns
             for spec in self.amount_patterns:
                 matches = list(spec.compiled.finditer(text))
 
                 for match in matches:
-                    context_start = max(0, match.start() - 50)
-                    context_end = min(len(text), match.end() + 50)
-                    context_window = text[context_start:context_end].lower()
-
-                    if any(bl in context_window for bl in self.blacklist_contexts):
-                        continue
-
-                    preceding_text = text[max(0, match.start() - 150):match.start()].lower()
-                    following_text = text[match.end():min(len(text), match.end() + 30)].lower()
-
-                    if 'subtotal' in preceding_text or 'subtotal' in following_text:
-                        if 'grand' not in preceding_text and 'grand' not in following_text:
-                            match_text = match.group(0).lower()
-                            if any(keyword in match_text for keyword in ['total', 'amount', 'paid', 'sum']):
-                                pass
-                            elif 'total' in text[max(0, match.start() - 50):match.start()].lower() and \
-                                 'subtotal' not in text[max(0, match.start() - 50):match.start()].lower():
-                                pass
-                            else:
-                                continue
-
+                    # Extract amount string from capture group
                     amount_str = match.group(1) if match.groups() else match.group(0)
-                    amount_str = amount_str.replace(',', '').replace('$', '').replace('€', '').replace('£', '').replace('¥', '').strip()
+                    raw_text = match.group(0)
 
-                    try:
-                        amount = Decimal(amount_str)
+                    # Parse amount using shared money utility
+                    # Use context hint if available
+                    format_hint = None
+                    if context and context.user_locale:
+                        format_hint = MoneyFormat.EUROPEAN if context.user_locale == 'EU' else MoneyFormat.US
 
-                        if amount <= 0:
-                            continue
+                    amount = parse_money(amount_str, format_hint=format_hint)
 
-                        if amount > 10000 and spec.priority > 2:
-                            continue
-
-                        if _debug is not None:
-                            _debug['patterns_matched']['amount'] = spec.name
-                            _debug['confidence_per_field']['amount'] = 1.0 / spec.priority
-                            _debug['amount_match_span'] = (match.start(), match.end())
-
-                        return amount
-
-                    except (InvalidOperation, ValueError):
+                    if amount is None or amount <= 0:
                         continue
+
+                    # Skip unreasonably large amounts for low-priority patterns
+                    if amount > 10000 and spec.priority > 2:
+                        continue
+
+                    # Create candidate with context analysis
+                    candidate = create_amount_candidate(
+                        value=amount,
+                        pattern_name=spec.name,
+                        match_span=(match.start(), match.end()),
+                        raw_text=raw_text,
+                        priority=spec.priority,
+                        text=text
+                    )
+
+                    candidates.append(candidate)
+
+            # Select best candidate using scoring
+            best = select_best_amount(candidates, text)
+
+            if best:
+                # Record provenance in debug metadata
+                if _debug is not None:
+                    _debug['patterns_matched']['amount'] = best.pattern_name
+                    _debug['confidence_per_field']['amount'] = 1.0 / best.priority
+                    _debug['amount_match_span'] = best.match_span
+
+                    # Capture top 3 candidates for review UI
+                    top_3 = select_top_amounts(candidates, text, top_n=3)
+                    _debug['amount_candidates'] = [
+                        {
+                            'value': str(c.value),
+                            'score': round(score, 2),
+                            'pattern': c.pattern_name
+                        }
+                        for c, score in top_3
+                    ]
+
+                return best.value
 
             return None
 
@@ -587,95 +794,167 @@ class ReceiptParser:
             return 'JPY'
         return None
 
-    def extract_currency(self, text: str, _debug=None) -> str:
+    def extract_currency(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[str]:
         """
-        Extract currency from receipt with context awareness.
+        Extract currency from receipt using candidate-based scoring.
 
-        First looks near the matched amount span (most specific evidence),
-        then falls back to document-level heuristics.
+        BREAKING CHANGE: Returns None when evidence is weak, instead of defaulting to USD.
+        Upstream services should handle defaulting with provenance tracking.
 
         Args:
             text: Receipt text
+            context: Optional parse context with email metadata
 
         Returns:
-            Currency code (USD, EUR, etc.) or 'USD' as default
+            Currency code (USD, EUR, etc.) or None if evidence is weak
         """
         try:
-            # Strategy 0: Look near the amount match span — currency of the
-            # specific transaction amount, not just any currency in the doc.
+            candidates: List[CurrencyCandidate] = []
+            text_upper = text.upper()
+
+            # Strategy 1: Explicit currency codes near amount
             if _debug is not None and 'amount_match_span' in _debug:
                 start, end = _debug['amount_match_span']
                 vicinity = text[max(0, start - 200):min(len(text), end + 200)]
-                currency = self._detect_currency_in_text(vicinity)
-                if currency:
-                    return currency
+                vicinity_upper = vicinity.upper()
 
-            text_upper = text.upper()
+                for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
+                    if code in vicinity_upper:
+                        candidate = create_currency_candidate(
+                            value=code,
+                            pattern_name='explicit_near_amount',
+                            match_span=(start, end),
+                            raw_text=code,
+                            priority=1,
+                            is_explicit=True,
+                            text=text
+                        )
+                        candidates.append(candidate)
 
-            # Strategy 1: Check for Canadian indicators first
-            # Many Canadian receipts don't say CAD explicitly near the total.
-            if 'CANADA' in text_upper or 'GST' in text_upper or 'PST' in text_upper:
-                for keyword in ['TOTAL', 'AMOUNT', 'CHARGED', 'PAID']:
-                    keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
-                    for pos in keyword_positions:
-                        context = text_upper[pos:pos+100]
-                        if 'USD' in context:
-                            return 'USD'
-
-                return 'CAD'
-
-            # Strategy 2: Look for currency near "TOTAL" or "AMOUNT" keywords
+            # Strategy 2: Currency codes near keywords (TOTAL, AMOUNT)
             for keyword in ['TOTAL', 'AMOUNT', 'CHARGED', 'PAID']:
                 keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
 
                 for pos in keyword_positions:
-                    context = text_upper[pos:pos+100]
+                    keyword_context = text_upper[pos:pos+100]
 
                     for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
-                        if code in context:
-                            return code
+                        if code in keyword_context:
+                            candidate = create_currency_candidate(
+                                value=code,
+                                pattern_name='explicit_near_keyword',
+                                match_span=(pos, pos + len(keyword)),
+                                raw_text=code,
+                                priority=2,
+                                is_explicit=True,
+                                text=text
+                            )
+                            candidates.append(candidate)
 
-                    if 'C$' in text[pos:pos+100]:
-                        return 'CAD'
+            # Strategy 3: CAD heuristic (GST/PST/CANADA indicators + Canadian provinces)
+            canadian_indicators = ['CANADA', 'GST', 'PST', 'HST']
+            canadian_provinces = [' AB ', ' BC ', ' MB ', ' NB ', ' NL ', ' NS ', ' ON ', ' PE ', ' QC ', ' SK ']  # Space-padded to avoid false matches
 
-                    if '€' in text[pos:pos+100]:
-                        return 'EUR'
-                    if '£' in text[pos:pos+100]:
-                        return 'GBP'
-                    if '¥' in text[pos:pos+100]:
-                        return 'JPY'
+            has_canadian_indicator = any(ind in text_upper for ind in canadian_indicators)
+            has_province_code = any(prov in text_upper for prov in canadian_provinces)
 
-            # Strategy 3: Count currency occurrences
-            currency_counts = {}
-            for code in ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'NZD', 'JPY']:
-                count = text_upper.count(code)
-                if count > 0:
-                    currency_counts[code] = count
+            if has_canadian_indicator or has_province_code:
+                # Check if USD is explicitly mentioned near keywords
+                has_usd_override = False
+                for keyword in ['TOTAL', 'AMOUNT']:
+                    keyword_positions = [i for i in range(len(text_upper)) if text_upper.startswith(keyword, i)]
+                    for pos in keyword_positions:
+                        if 'USD' in text_upper[pos:pos+100]:
+                            has_usd_override = True
+                            break
 
-            if currency_counts:
-                return max(currency_counts, key=currency_counts.get)
+                if not has_usd_override:
+                    indicator_source = 'province_code' if has_province_code else 'GST/PST/CANADA'
+                    candidate = create_currency_candidate(
+                        value='CAD',
+                        pattern_name='cad_heuristic',
+                        match_span=(0, 0),
+                        raw_text=indicator_source,
+                        priority=3,
+                        is_explicit=False,
+                        text=text
+                    )
+                    candidates.append(candidate)
 
-            # Strategy 4: Check for C$ prefix anywhere
+            # Strategy 4: C$ prefix
             if 'C$' in text or 'C $' in text:
-                return 'CAD'
+                candidate = create_currency_candidate(
+                    value='CAD',
+                    pattern_name='c_dollar_symbol',
+                    match_span=(0, 0),
+                    raw_text='C$',
+                    priority=2,
+                    is_explicit=False,
+                    text=text
+                )
+                candidates.append(candidate)
 
-            # Strategy 5: Check for symbols
-            if '€' in text:
-                return 'EUR'
-            if '£' in text:
-                return 'GBP'
-            if '¥' in text:
-                return 'JPY'
+            # Strategy 5: Currency symbols
+            symbol_map = {
+                '€': 'EUR',
+                '£': 'GBP',
+                '¥': 'JPY',
+            }
 
-            # Strategy 6: If we see $ but no currency code, default to USD
-            if '$' in text:
-                return 'USD'
+            for symbol, code in symbol_map.items():
+                if symbol in text:
+                    candidate = create_currency_candidate(
+                        value=code,
+                        pattern_name='currency_symbol',
+                        match_span=(0, 0),
+                        raw_text=symbol,
+                        priority=4,
+                        is_explicit=False,
+                        text=text
+                    )
+                    candidates.append(candidate)
 
-            return 'USD'
+            # Strategy 6: Generic $ symbol (weakest evidence)
+            if '$' in text and not any(c.value in ['CAD', 'USD'] for c in candidates):
+                # Use context hint if available
+                if context and context.user_currency:
+                    code = context.user_currency
+                else:
+                    # Weak evidence - don't add candidate
+                    # Return None to let upstream handle defaulting
+                    pass
+
+            # Select best candidate
+            best = select_best_currency(candidates)
+
+            if best:
+                if _debug is not None:
+                    _debug['patterns_matched']['currency'] = best.pattern_name
+                    _debug['confidence_per_field']['currency'] = 0.9 if best.is_explicit else 0.6
+
+                    # Capture top 3 candidates for review UI
+                    top_3 = select_top_currencies(candidates, top_n=3)
+                    _debug['currency_candidates'] = [
+                        {
+                            'value': c.value,
+                            'score': round(score, 2),
+                            'pattern': c.pattern_name
+                        }
+                        for c, score in top_3
+                    ]
+
+                return best.value
+
+            # No strong evidence found - return None
+            # Upstream services will handle defaulting with provenance
+            if _debug is not None:
+                _debug['warnings'].append('No strong currency evidence found')
+
+            return None
 
         except (re.error, AttributeError):
             logger.warning("Error extracting currency", exc_info=True)
-            return 'USD'
+            return None
 
     def _detect_date_locale(self, text: str) -> str:
         """
@@ -711,31 +990,100 @@ class ReceiptParser:
                 continue
         return None
 
-    def extract_date(self, text: str, _debug=None) -> Optional[str]:
+    def extract_date(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[str]:
         """
-        Extract receipt date.
+        Extract receipt date using candidate-based scoring.
 
         Args:
             text: Receipt text
+            context: Optional parse context with email metadata
 
         Returns:
             Date in YYYY-MM-DD format or None
         """
         try:
-            locale = self._detect_date_locale(text)
+            candidates: List[DateCandidate] = []
 
+            # Determine locale for ambiguous date parsing
+            # Use context if available, otherwise detect from text
+            if context and context.user_locale:
+                locale = 'DD/MM' if context.user_locale == 'EU' else 'MM/DD'
+            else:
+                locale = self._detect_date_locale(text)
+
+            # Split text into lines for line position tracking
+            lines = text.split('\n')
+            line_offsets = []
+            offset = 0
+            for line in lines:
+                line_offsets.append(offset)
+                offset += len(line) + 1  # +1 for newline
+
+            # Generate candidates from all date patterns
             for spec in self.date_patterns:
                 for match in spec.compiled.finditer(text):
                     date_str = match.group(1)
-                    if spec.name == 'numeric_date_ambiguous':
+
+                    # Determine if this pattern is ambiguous
+                    is_ambiguous = spec.name == 'numeric_date_ambiguous'
+
+                    # Parse date based on pattern type
+                    if is_ambiguous:
                         parsed_date = self._parse_numeric_date_with_locale(date_str, locale)
                     else:
                         parsed_date = self._parse_date_string(date_str)
-                    if parsed_date:
-                        if _debug is not None:
-                            _debug['patterns_matched']['date'] = spec.name
-                            _debug['confidence_per_field']['date'] = 0.9
-                        return parsed_date
+
+                    if not parsed_date:
+                        continue
+
+                    # Find line position
+                    match_start = match.start()
+                    line_position = 0
+                    for idx, line_offset in enumerate(line_offsets):
+                        if match_start >= line_offset:
+                            line_position = idx
+                        else:
+                            break
+
+                    # Create candidate
+                    candidate = create_date_candidate(
+                        value=parsed_date,
+                        pattern_name=spec.name,
+                        match_span=(match.start(), match.end()),
+                        raw_text=match.group(0),
+                        priority=spec.priority or 100,
+                        line_position=line_position,
+                        text=text,
+                        is_ambiguous=is_ambiguous,
+                        detected_locale=locale if is_ambiguous else None
+                    )
+                    candidates.append(candidate)
+
+            # Select best candidate using scoring
+            best = select_best_date(candidates)
+
+            if best:
+                # Record provenance in debug
+                if _debug is not None:
+                    _debug['patterns_matched']['date'] = best.pattern_name
+                    # Confidence based on pattern type and ambiguity
+                    if best.is_ambiguous:
+                        _debug['confidence_per_field']['date'] = 0.7
+                    else:
+                        _debug['confidence_per_field']['date'] = 0.9
+
+                    # Capture top 3 candidates for review UI
+                    top_3 = select_top_dates(candidates, top_n=3)
+                    _debug['date_candidates'] = [
+                        {
+                            'value': c.value,
+                            'score': round(score, 2),
+                            'pattern': c.pattern_name
+                        }
+                        for c, score in top_3
+                    ]
+
+                return best.value
 
             return None
 
@@ -827,25 +1175,45 @@ class ReceiptParser:
 
     def _calculate_confidence(self, parsed_data: Dict[str, Any]) -> float:
         """
-        Calculate confidence score for parsed data.
+        Calculate confidence score using per-field evidence from extraction.
+
+        Uses confidence_per_field scores from debug metadata, weighted by field importance.
 
         Args:
-            parsed_data: Dictionary of parsed fields
+            parsed_data: Dictionary of parsed fields including debug metadata
 
         Returns:
             Confidence score between 0.0 and 1.0
         """
+        # Get per-field confidence scores from debug metadata
+        confidence_per_field = parsed_data.get('debug', {}).get('confidence_per_field', {})
+
+        # Field weights (sum to 1.0)
+        weights = {
+            'amount': 0.35,    # Most critical field
+            'vendor': 0.25,    # Important for categorization
+            'date': 0.25,      # Important for tracking
+            'currency': 0.05,  # Less critical, often inferred
+            'tax': 0.10,       # Nice to have but not critical
+        }
+
         score = 0.0
 
-        if parsed_data.get('vendor'):
-            score += 0.25
-        if parsed_data.get('amount'):
-            score += 0.35
-        if parsed_data.get('date'):
-            score += 0.25
-        if parsed_data.get('currency'):
-            score += 0.05
-        if parsed_data.get('tax'):
-            score += 0.10
+        # Add weighted scores for fields that were extracted
+        for field, weight in weights.items():
+            if parsed_data.get(field) is not None:
+                # Use per-field confidence if available, otherwise use presence bonus
+                field_confidence = confidence_per_field.get(field, 0.5)
+                score += weight * field_confidence
+            # If field is None and expected, no score
+
+        # Penalty for warnings (e.g., weak currency evidence)
+        warnings = parsed_data.get('debug', {}).get('warnings', [])
+        if warnings:
+            penalty = min(0.1, len(warnings) * 0.05)
+            score -= penalty
+
+        # Ensure score is in valid range
+        score = max(0.0, min(1.0, score))
 
         return round(score, 2)

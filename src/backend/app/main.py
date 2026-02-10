@@ -30,10 +30,11 @@ async def health_check():
     return {"status": "healthy"}
 
 # Import routers
-from app.routers import sync, receipts, export, upload
+from app.routers import sync, receipts, export, upload, review
 
 # Include routers
 app.include_router(sync.router)
 app.include_router(receipts.router)
 app.include_router(export.router)
 app.include_router(upload.router)
+app.include_router(review.router)
