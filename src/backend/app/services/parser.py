@@ -247,9 +247,10 @@ class ReceiptParser:
             ),
             PatternSpec(
                 name='harmonized_sales_tax',
-                pattern=r'harmonized\s+sales\s+tax[\s\-A-Za-z0-9]*?[\s:]+([\d,]+\.\d{2})',
-                example='Harmonized Sales Tax - Canada - 100092287 RT0001 2.65',
-                notes='Full "Harmonized Sales Tax" with intervening content (Air Canada fix)',
+                pattern=r'harmonized\s+sales\s+tax[\s\S]*?([\d,]+\.\d{2})',
+                example='Harmonized Sales Tax - Canada - 100092287\nRT00012.65',
+                notes='Full "Harmonized Sales Tax" multi-line with attached prefix (Air Canada fix)',
+                flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
             ),
             PatternSpec(
                 name='tax_pipe_separator',
@@ -428,8 +429,22 @@ class ReceiptParser:
     def _normalize_ocr_spaces(self, text: str) -> str:
         """
         Remove OCR-induced extra spaces between characters.
-        Handles cases like "L o v a b l e" → "Lovable"
+        Handles cases like:
+        - "L o v a b l e" → "Lovable" (character-level spacing)
+        - "H S T  -  C a n a d a" → "HST - Canada" (excessive spacing)
         """
+        # Detect excessive spacing (>35% of sample is spaces = likely spaced OCR)
+        sample = text[:500]  # Check first 500 chars
+        if len(sample) > 0:
+            space_ratio = sample.count(' ') / len(sample)
+
+            if space_ratio > 0.35:
+                # Aggressive normalization for highly-spaced OCR
+                # Collapse multiple spaces to single space
+                text = re.sub(r'\s{2,}', ' ', text)
+                return text
+
+        # Normal character-level spacing fix for less severe cases
         if re.search(r'[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]', text):
             pattern = r'\b([A-Za-z])\s+(?=[A-Za-z](\s+|$))'
             while True:
@@ -634,6 +649,8 @@ class ReceiptParser:
                     r'^\s*booking\s+(confirmation|reference)\b',  # Skip "Booking Confirmation"
                     r'^\s*(order\s+)?confirmation\s*$',
                     r'^\s*itinerary\b',
+                    r'^\s*(and|or|but|of|to|for|in)\s+',  # Skip lines starting with conjunctions
+                    r'\btariffsopens\b',  # Skip OCR artifact
                 ]
                 skip_line = False
                 for pattern in skip_patterns:
@@ -678,6 +695,10 @@ class ReceiptParser:
 
                 vendor = self._clean_vendor_name(line)
                 if vendor and len(vendor) > 2:
+                    # Skip person names (First Last or First Middle Last format)
+                    if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}$', vendor):
+                        continue
+
                     generic_phrases = ['your order', 'your trip', 'your receipt', 'your booking']
                     if vendor.lower() not in generic_phrases:
                         candidate = create_vendor_candidate(
