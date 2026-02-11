@@ -4,7 +4,7 @@ OCR service for extracting text from receipt images and PDFs.
 
 import io
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List, Union
 from pathlib import Path
 import pytesseract
 from PIL import Image
@@ -21,6 +21,31 @@ class OCRService:
         """Initialize OCR service with Tesseract configuration."""
         # Set Tesseract command path
         pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
+
+    def extract_text_with_bbox(self, image_data: bytes) -> Dict[str, List]:
+        """
+        Extract text with bounding box coordinates using Tesseract.
+
+        Returns:
+            Dictionary with keys: 'text', 'left', 'top', 'width', 'height', 'conf'
+            Each key maps to a list of values for each detected word/region.
+        """
+        try:
+            # Load image
+            image = Image.open(io.BytesIO(image_data))
+
+            # Preprocess image for better OCR
+            image = self._preprocess_image(image)
+
+            # Run OCR with bbox extraction
+            custom_config = r'--oem 3 --psm 6'
+            data = pytesseract.image_to_data(image, config=custom_config, output_type=pytesseract.Output.DICT)
+
+            return data
+
+        except Exception as e:
+            print(f"Error extracting text with bbox: {str(e)}")
+            return {'text': [], 'left': [], 'top': [], 'width': [], 'height': [], 'conf': []}
 
     def extract_text_from_image(self, image_data: bytes) -> str:
         """
@@ -99,6 +124,41 @@ class OCRService:
             print(f"Error in direct PDF text extraction: {str(e)}")
             return ""
 
+    def extract_bbox_from_pdf(self, pdf_data: bytes, page_num: int = 0) -> Dict[str, List]:
+        """
+        Extract text with bounding boxes from a specific page of a PDF.
+
+        Args:
+            pdf_data: Raw PDF bytes
+            page_num: Page number to extract (0-indexed)
+
+        Returns:
+            Dictionary with bbox data for the specified page
+        """
+        try:
+            # Convert PDF pages to images
+            images = convert_from_bytes(pdf_data)
+
+            if page_num >= len(images):
+                print(f"Page {page_num} does not exist in PDF (total pages: {len(images)})")
+                return {'text': [], 'left': [], 'top': [], 'width': [], 'height': [], 'conf': []}
+
+            # Get the requested page
+            image = images[page_num]
+
+            # Preprocess image
+            image = self._preprocess_image(image)
+
+            # Extract bbox data
+            custom_config = r'--oem 3 --psm 6'
+            data = pytesseract.image_to_data(image, config=custom_config, output_type=pytesseract.Output.DICT)
+
+            return data
+
+        except Exception as e:
+            print(f"Error extracting bbox from PDF: {str(e)}")
+            return {'text': [], 'left': [], 'top': [], 'width': [], 'height': [], 'conf': []}
+
     def _extract_pdf_text_ocr(self, pdf_data: bytes) -> str:
         """
         Extract text from PDF using OCR (for image-based PDFs).
@@ -164,8 +224,9 @@ class OCRService:
         self,
         file_data: bytes,
         mime_type: str,
-        filename: str = ""
-    ) -> str:
+        filename: str = "",
+        with_bbox: bool = False
+    ) -> Union[str, Dict[str, Union[str, Dict[str, List]]]]:
         """
         Extract text from a file (auto-detects format).
 
@@ -173,9 +234,11 @@ class OCRService:
             file_data: Raw file bytes
             mime_type: MIME type of the file
             filename: Optional filename for extension detection
+            with_bbox: If True, return both text and bbox data (for images/PDFs only)
 
         Returns:
-            Extracted text
+            If with_bbox=False: Extracted text string
+            If with_bbox=True: Dictionary with 'text' and 'bbox_data' keys
         """
         # Determine file type
         is_pdf = mime_type == 'application/pdf' or filename.lower().endswith('.pdf')
@@ -183,13 +246,27 @@ class OCRService:
             filename.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']
         )
 
-        if is_pdf:
-            return self.extract_text_from_pdf(file_data)
-        elif is_image:
-            return self.extract_text_from_image(file_data)
+        if with_bbox:
+            if is_pdf:
+                text = self.extract_text_from_pdf(file_data)
+                bbox_data = self.extract_bbox_from_pdf(file_data, page_num=0)
+                return {'text': text, 'bbox_data': bbox_data}
+            elif is_image:
+                text = self.extract_text_from_image(file_data)
+                bbox_data = self.extract_text_with_bbox(file_data)
+                return {'text': text, 'bbox_data': bbox_data}
+            else:
+                print(f"Unsupported file type for bbox extraction: {mime_type}")
+                return {'text': "", 'bbox_data': None}
         else:
-            print(f"Unsupported file type: {mime_type}")
-            return ""
+            # Backward compatible - return text only
+            if is_pdf:
+                return self.extract_text_from_pdf(file_data)
+            elif is_image:
+                return self.extract_text_from_image(file_data)
+            else:
+                print(f"Unsupported file type: {mime_type}")
+                return ""
 
     def normalize_text(self, text: str) -> str:
         """
