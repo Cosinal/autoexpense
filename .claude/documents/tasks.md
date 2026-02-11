@@ -13,15 +13,17 @@
 
 ## In Progress
 
-### Task 1: Build Parser Regression Test Suite ✅ IN PROGRESS
-- **Status**: Test suite created, baseline measured
+### Task 1: Build Parser Regression Test Suite ✅ MOSTLY COMPLETE
+- **Status**: Core infrastructure complete, ready for PDF receipts
 - **Owner**: Claude
 - **Progress**:
-  - ✅ Created comprehensive test suite (14 test cases)
+  - ✅ Created synthetic text test suite (14 test cases)
   - ✅ Measured baseline accuracy: **80.0% overall**
   - ✅ Identified critical issues (currency 64%, tax 71%)
-  - ⏳ Expanding to 50+ test cases
-  - ⏳ Implementing Phase 1 improvements
+  - ✅ Built bulk PDF test runner (test_parser_bulk.py)
+  - ✅ Created test data structure (tests/data/receipts/)
+  - ✅ Documented testing workflow (TESTING_GUIDE.md)
+  - ⏳ **BLOCKED**: Need real PDF receipts to expand to 50+
 - **Baseline Results**:
   - Date: 100.0% ✅ (Perfect!)
   - Amount: 85.7% ⚠️ (Close to target)

@@ -1,0 +1,8 @@
+{
+  "vendor": "Example Store",
+  "amount": "45.99",
+  "date": "2024-02-10",
+  "currency": "CAD",
+  "tax": "2.99",
+  "notes": "Example receipt - copy this template for new test cases"
+}
