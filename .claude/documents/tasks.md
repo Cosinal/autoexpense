@@ -13,16 +13,32 @@
 
 ## In Progress
 
+### Task 1: Build Parser Regression Test Suite ✅ IN PROGRESS
+- **Status**: Test suite created, baseline measured
+- **Owner**: Claude
+- **Progress**:
+  - ✅ Created comprehensive test suite (14 test cases)
+  - ✅ Measured baseline accuracy: **80.0% overall**
+  - ✅ Identified critical issues (currency 64%, tax 71%)
+  - ⏳ Expanding to 50+ test cases
+  - ⏳ Implementing Phase 1 improvements
+- **Baseline Results**:
+  - Date: 100.0% ✅ (Perfect!)
+  - Amount: 85.7% ⚠️ (Close to target)
+  - Vendor: 78.6% ❌ (Below target)
+  - Tax: 71.4% ❌ (Below target)
+  - Currency: 64.3% ❌ (Worst performer)
+- **Next**: Phase 1 fixes (currency defaulting, tax patterns)
+
 ### Parser Reliability Improvements
-- **Status**: Not started
+- **Status**: Ready to start (blocked on Task 1 completion)
 - **Owner**: TBD
-- **Goal**: Increase parser accuracy from ~70-85% to 90%+
-- **Scope**:
-  - Add regression test suite with real-world receipts
-  - Improve vendor extraction patterns
-  - Better date disambiguation (MM/DD vs DD/MM)
-  - More robust amount parsing (handle edge cases)
-  - Improve tax extraction deduplication
+- **Goal**: Increase parser accuracy from 80% to 90%+
+- **Priority Fixes** (from baseline analysis):
+  1. Currency detection (64% → 90%): Add CAD default for Canadian receipts
+  2. Tax extraction (71% → 90%): Add CDN$ and CA$ patterns
+  3. Vendor extraction (79% → 90%): Fix payment processor logic
+  4. Amount extraction (86% → 95%): Total vs subtotal priority
 - **Success Metric**: 90%+ accuracy on test suite (50+ receipts)
 
 ### Core Workflow Hardening
