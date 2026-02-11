@@ -28,6 +28,50 @@ We use two complementary testing approaches:
 
 ## Quick Start: Adding Real PDF Receipts
 
+### Automated Workflow (Recommended)
+
+The fastest way to add new test receipts:
+
+**Step 1: Add PDF files to any folder**
+
+```bash
+# Put your PDFs in the failed/ folder (recommended starting point)
+cp ~/Downloads/receipt*.pdf src/backend/tests/data/receipts/failed/
+```
+
+**Step 2: Auto-generate JSON metadata**
+
+```bash
+cd src/backend
+python3 tests/generate_expected_results.py
+```
+
+This will:
+- Find all PDFs without matching JSON files
+- Run OCR + parser on each PDF
+- Generate JSON files with extracted values
+- Show you what was extracted
+
+**Step 3: Review and correct**
+
+Open each generated JSON file and:
+- Verify extracted values are correct
+- Fix any errors
+- Update the `notes` field with description
+- For vendor names, use shortest version (e.g., "Irving Oil" not "Irving Oil Limited")
+
+**Step 4: Run tests**
+
+```bash
+python3 tests/test_parser_bulk.py
+```
+
+---
+
+### Manual Workflow (If Needed)
+
+If you prefer to create JSON files manually:
+
 ### Step 1: Organize Your PDFs
 
 Place receipts in the appropriate folder:
@@ -264,6 +308,8 @@ When debugging a specific field (e.g., currency), you can:
 - Match is case-insensitive substring
 - "Starbucks" matches "STARBUCKS COFFEE" ✅
 - "Uber" matches "Uber Receipts" ✅
+- "Irving Oil" matches "Irving Oil Limited" ✅
+- **Tip**: Use shortest, most recognizable version in JSON
 - `null` means expect no vendor extraction
 
 **`amount`**:
