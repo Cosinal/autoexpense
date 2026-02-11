@@ -19,6 +19,7 @@ import sys
 import os
 import json
 import argparse
+import mimetypes
 from pathlib import Path
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
@@ -140,10 +141,24 @@ def test_receipt(pdf_path: Path, json_path: Path, ocr_service: OCRService,
         )
 
     try:
+        # Read file as bytes
+        with open(pdf_path, 'rb') as f:
+            file_data = f.read()
+
+        # Detect MIME type
+        mime_type, _ = mimetypes.guess_type(str(pdf_path))
+        if not mime_type:
+            # Default to PDF if can't detect
+            mime_type = 'application/pdf'
+
         # Run OCR
         if verbose:
-            print(f"\n1. Running OCR...")
-        ocr_text = ocr_service.extract_text_from_file(str(pdf_path))
+            print(f"\n1. Running OCR... (MIME type: {mime_type})")
+        ocr_text = ocr_service.extract_text_from_file(
+            file_data=file_data,
+            mime_type=mime_type,
+            filename=pdf_path.name
+        )
 
         if not ocr_text or ocr_text.strip() == '':
             return TestResult(
@@ -232,7 +247,7 @@ def run_bulk_tests(receipts_dir: Path, folder: Optional[str] = None,
     parser = ReceiptParser()
     results = BulkTestResults()
 
-    # Find all PDF files
+    # Find all receipt files (PDFs and images)
     if folder:
         search_dirs = [receipts_dir / folder]
     else:
@@ -242,22 +257,24 @@ def run_bulk_tests(receipts_dir: Path, folder: Optional[str] = None,
             receipts_dir / 'edge_cases'
         ]
 
-    pdf_files = []
+    receipt_files = []
+    extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png']
     for search_dir in search_dirs:
         if search_dir.exists():
-            pdf_files.extend(search_dir.glob('*.pdf'))
+            for ext in extensions:
+                receipt_files.extend(search_dir.glob(ext))
 
-    if not pdf_files:
-        print(f"No PDF files found in {receipts_dir}")
+    if not receipt_files:
+        print(f"No receipt files found in {receipts_dir}")
         print(f"Searched: {', '.join(str(d) for d in search_dirs)}")
         return results
 
     print(f"\n{'='*80}")
-    print(f"BULK PARSER TEST - {len(pdf_files)} receipts")
+    print(f"BULK PARSER TEST - {len(receipt_files)} receipts")
     print(f"{'='*80}")
 
     # Test each receipt
-    for pdf_path in sorted(pdf_files):
+    for pdf_path in sorted(receipt_files):
         json_path = pdf_path.with_suffix('.json')
 
         if not json_path.exists():

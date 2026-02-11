@@ -18,6 +18,7 @@ import sys
 import os
 import json
 import argparse
+import mimetypes
 from pathlib import Path
 from decimal import Decimal
 from typing import Dict, Any, List
@@ -44,9 +45,23 @@ def generate_json_for_pdf(pdf_path: Path, ocr_service: OCRService,
     print(f"{'='*80}")
 
     try:
+        # Read file as bytes
+        with open(pdf_path, 'rb') as f:
+            file_data = f.read()
+
+        # Detect MIME type
+        mime_type, _ = mimetypes.guess_type(str(pdf_path))
+        if not mime_type:
+            # Default to PDF if can't detect
+            mime_type = 'application/pdf'
+
         # Run OCR
-        print(f"\n1. Running OCR...")
-        ocr_text = ocr_service.extract_text_from_file(str(pdf_path))
+        print(f"\n1. Running OCR... (MIME type: {mime_type})")
+        ocr_text = ocr_service.extract_text_from_file(
+            file_data=file_data,
+            mime_type=mime_type,
+            filename=pdf_path.name
+        )
 
         if not ocr_text or ocr_text.strip() == '':
             print(f"  ✗ OCR extracted no text - skipping")
@@ -99,8 +114,8 @@ def generate_json_for_pdf(pdf_path: Path, ocr_service: OCRService,
         return False
 
 
-def find_pdfs_without_json(receipts_dir: Path, folder: str = None) -> List[Path]:
-    """Find all PDFs that don't have matching JSON files."""
+def find_receipts_without_json(receipts_dir: Path, folder: str = None) -> List[Path]:
+    """Find all receipt files (PDFs and images) that don't have matching JSON files."""
 
     if folder:
         search_dirs = [receipts_dir / folder]
@@ -111,18 +126,22 @@ def find_pdfs_without_json(receipts_dir: Path, folder: str = None) -> List[Path]
             receipts_dir / 'edge_cases'
         ]
 
-    pdfs_without_json = []
+    receipts_without_json = []
+
+    # Look for PDFs and common image formats
+    extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png']
 
     for search_dir in search_dirs:
         if not search_dir.exists():
             continue
 
-        for pdf_path in search_dir.glob('*.pdf'):
-            json_path = pdf_path.with_suffix('.json')
-            if not json_path.exists():
-                pdfs_without_json.append(pdf_path)
+        for ext in extensions:
+            for receipt_path in search_dir.glob(ext):
+                json_path = receipt_path.with_suffix('.json')
+                if not json_path.exists():
+                    receipts_without_json.append(receipt_path)
 
-    return pdfs_without_json
+    return receipts_without_json
 
 
 def main():
@@ -147,9 +166,9 @@ def main():
         print(f"Error: Receipts directory not found: {receipts_dir}")
         sys.exit(1)
 
-    # Find PDFs without JSON files
+    # Find receipt files without JSON files
     if args.overwrite:
-        # Find all PDFs (will overwrite existing JSONs)
+        # Find all receipt files (will overwrite existing JSONs)
         if args.folder:
             search_dirs = [receipts_dir / args.folder]
         else:
@@ -159,38 +178,40 @@ def main():
                 receipts_dir / 'edge_cases'
             ]
 
-        pdf_files = []
+        receipt_files = []
+        extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png']
         for search_dir in search_dirs:
             if search_dir.exists():
-                pdf_files.extend(search_dir.glob('*.pdf'))
+                for ext in extensions:
+                    receipt_files.extend(search_dir.glob(ext))
     else:
-        pdf_files = find_pdfs_without_json(receipts_dir, folder=args.folder)
+        receipt_files = find_receipts_without_json(receipts_dir, folder=args.folder)
 
-    if not pdf_files:
-        print("\n✓ No PDFs found without JSON files")
-        print("\nAll PDFs already have expected results JSON files.")
+    if not receipt_files:
+        print("\n✓ No receipt files found without JSON files")
+        print("\nAll receipt files already have expected results JSON files.")
         print("Use --overwrite to regenerate existing JSON files.")
         return
 
     print(f"\n{'='*80}")
-    print(f"GENERATE EXPECTED RESULTS - {len(pdf_files)} PDFs")
+    print(f"GENERATE EXPECTED RESULTS - {len(receipt_files)} files")
     print(f"{'='*80}")
-    print(f"\nFound {len(pdf_files)} PDF(s) without JSON files:")
-    for pdf_path in sorted(pdf_files):
-        print(f"  - {pdf_path.name}")
+    print(f"\nFound {len(receipt_files)} receipt file(s) without JSON files:")
+    for receipt_path in sorted(receipt_files):
+        print(f"  - {receipt_path.name}")
 
     # Initialize services
     ocr_service = OCRService()
     parser = ReceiptParser()
 
-    # Process each PDF
+    # Process each receipt file
     success_count = 0
     skip_count = 0
     error_count = 0
 
-    for pdf_path in sorted(pdf_files):
+    for receipt_path in sorted(receipt_files):
         result = generate_json_for_pdf(
-            pdf_path, ocr_service, parser, overwrite=args.overwrite
+            receipt_path, ocr_service, parser, overwrite=args.overwrite
         )
         if result:
             success_count += 1
@@ -203,7 +224,7 @@ def main():
     print(f"\n{'='*80}")
     print("SUMMARY")
     print(f"{'='*80}")
-    print(f"\nTotal PDFs processed: {len(pdf_files)}")
+    print(f"\nTotal receipt files processed: {len(receipt_files)}")
     print(f"  ✓ JSON files created: {success_count}")
     if skip_count > 0:
         print(f"  ⏭️  Skipped (JSON exists): {skip_count}")
