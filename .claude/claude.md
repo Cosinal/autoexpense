@@ -89,20 +89,56 @@
 
 ## Documentation Discipline
 
-### Architecture Decision Records (ADR)
-All major technical or product decisions must be documented in `documents/adr/`.
+### Architecture Decision Records (ADR) - REQUIRED
 
-**When to create an ADR:**
-- Choosing between technical approaches (e.g., sync vs async OCR)
-- Significant architectural changes (e.g., database schema changes)
-- Security or compliance decisions (e.g., authentication strategy)
-- Product direction shifts (e.g., enterprise vs individual focus)
+**CRITICAL RULE**: All significant decisions MUST be logged in `documents/adr/` before implementation.
 
-**ADR Format:**
-- **Context** - What problem are we solving?
-- **Decision** - What did we decide?
-- **Alternatives Considered** - What other options did we evaluate?
-- **Consequences** - What becomes easier or harder?
+**WHEN TO CREATE AN ADR** (Mandatory):
+- ✅ **Before** choosing between technical approaches (e.g., sync vs async OCR)
+- ✅ **Before** making architectural changes (e.g., database schema changes, API design)
+- ✅ **Before** security or compliance decisions (e.g., authentication strategy, data handling)
+- ✅ **Before** product direction shifts (e.g., enterprise vs individual focus, feature prioritization)
+- ✅ **Before** selecting third-party services (e.g., hosting provider, payment processor)
+- ✅ **Before** refactoring major components (e.g., parser rewrite, frontend migration)
+
+**If you're unsure whether a decision needs an ADR, create one.** Better to over-document than lose context.
+
+**ADR CREATION WORKFLOW**:
+1. Identify decision point (e.g., "Should we use async OCR?")
+2. Create ADR file: `documents/adr/ADR-NNNN-short-title.md` (sequential numbering)
+3. Document using template below
+4. Update `documents/adr/README.md` index
+5. Reference ADR in commit message when implementing decision
+
+**ADR TEMPLATE** (Required sections):
+```markdown
+# ADR-NNNN: [Short Title]
+
+**Status**: Proposed | Accepted | Deprecated | Superseded
+**Date**: YYYY-MM-DD
+
+## Context
+What is the issue we're addressing? What forces are at play?
+
+## Decision
+What are we doing about it? Be specific and concrete.
+
+## Alternatives Considered
+What other options did we evaluate? Why were they rejected?
+
+## Consequences
+What becomes easier or harder because of this decision?
+- Positive: [Benefits]
+- Negative: [Trade-offs]
+- Risks: [Potential issues]
+
+## References
+- Related ADRs
+- Implementation commits
+- External resources
+```
+
+**ENFORCEMENT**: Code reviews and pull requests MUST reference relevant ADRs for significant changes.
 
 ### Changelog
 Update `CHANGELOG.md` after every iteration with user-facing changes.
