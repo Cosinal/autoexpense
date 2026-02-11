@@ -206,6 +206,13 @@ class ReceiptParser:
                 example='2024-01-15',
             ),
             PatternSpec(
+                name='date_paid_issued',
+                pattern=r'date\s+(?:paid|issued|of\s+issue)[\s:]*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})',
+                example='Date paid October 26, 2025',
+                notes='Explicit date paid/issued indicator (high confidence - Anthropic/Air Canada fix)',
+                priority=1,
+            ),
+            PatternSpec(
                 name='ordinal_date',
                 pattern=r'(\d{1,2}(?:st|nd|rd|th)\s+[A-Za-z]{3,9}\s+\d{4})',
                 example='23rd November 2025',
@@ -233,6 +240,18 @@ class ReceiptParser:
                 example='HST: $1.09',
             ),
             PatternSpec(
+                name='percent_gst_hst',
+                pattern=r'\d+%\s+(?:gst|hst|pst)(?:/[A-Z]+)?[\s:]*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='5% GST/HST       19.75',
+                notes='Percentage prefix GST/HST format (Louis Vuitton fix)',
+            ),
+            PatternSpec(
+                name='harmonized_sales_tax',
+                pattern=r'harmonized\s+sales\s+tax[\s\-A-Za-z0-9]*?[\s:]+([\d,]+\.\d{2})',
+                example='Harmonized Sales Tax - Canada - 100092287 RT0001 2.65',
+                notes='Full "Harmonized Sales Tax" with intervening content (Air Canada fix)',
+            ),
+            PatternSpec(
                 name='tax_pipe_separator',
                 pattern=r'(?:hst|gst|tax|vat)\s*\|\s*[$€£¥]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
                 example='HST| $1.09',
@@ -245,9 +264,9 @@ class ReceiptParser:
             ),
             PatternSpec(
                 name='country_prefix_tax',
-                pattern=r'(?:[A-Z\s]+\s+)?(?:gst|hst|pst)(?:/[A-Z]+)?\s*\([^\)]+\):\s*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
-                example='CANADA GST/TPS (5%): $2.62',
-                notes='Sephora fix - country-prefix tax',
+                pattern=r'(?:[A-Z\s]+\s+)?(?:gst|hst|pst)(?:/[A-Z]+)?\s*\([^\)]+\)[\s:]*(?:[A-Z]{2,3})?\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+                example='HST - Canada (14% on CA$28.00) CA$3.92',
+                notes='Country-prefix tax with optional colon and currency code (Anthropic fix)',
             ),
             PatternSpec(
                 name='tax_pipe_urban',
@@ -597,8 +616,31 @@ class ReceiptParser:
                 if re.match(r'^\d+\.?\d*$', line):
                     continue
 
-                skip_words = ['receipt', 'invoice', 'bill', 'order', 'thanks', 'thank you', 'trip', 'ride', 'booking', 'tax invoice', 'paid']
-                if line.lower().strip() in skip_words:
+                # Skip document type labels and generic headers (pattern-based)
+                skip_patterns = [
+                    r'^\s*receipt\s*$',
+                    r'^\s*invoice\s*$',
+                    r'^\s*bill\s*$',
+                    r'^\s*order\s*$',
+                    r'^\s*thanks?\s*$',
+                    r'^\s*thank\s+you\s*$',
+                    r'^\s*trip\s*$',
+                    r'^\s*ride\s*$',
+                    r'^\s*booking\s*$',
+                    r'^\s*tax\s+invoice\s*$',
+                    r'^\s*paid\s*$',
+                    r'^\s*receipt\s+number\b',  # Skip "Receipt Number: 123"
+                    r'^\s*invoice\s+(number|#)\b',
+                    r'^\s*booking\s+(confirmation|reference)\b',  # Skip "Booking Confirmation"
+                    r'^\s*(order\s+)?confirmation\s*$',
+                    r'^\s*itinerary\b',
+                ]
+                skip_line = False
+                for pattern in skip_patterns:
+                    if re.match(pattern, line, re.IGNORECASE):
+                        skip_line = True
+                        break
+                if skip_line:
                     continue
 
                 # Skip lines that look like table headers (multiple capitalized words or common headers)
@@ -971,23 +1013,40 @@ class ReceiptParser:
         return 'MM/DD'  # Default to North American
 
     def _parse_numeric_date_with_locale(self, date_str: str, locale: str) -> Optional[str]:
-        """Parse a numeric date string using locale to resolve MM/DD vs DD/MM ambiguity."""
+        """Parse a numeric date string using locale to resolve MM/DD vs DD/MM ambiguity.
+
+        Tries locale-preferred format first, then falls back to opposite locale if primary fails.
+        This handles cases where locale detection is wrong or dates are ambiguous.
+        """
         sep = '/' if '/' in date_str else '-'
         parts = date_str.split(sep)
         if len(parts) != 3:
             return None
 
+        # Set primary and fallback formats based on locale
         if locale == 'DD/MM':
-            formats = [f'%d{sep}%m{sep}%Y', f'%d{sep}%m{sep}%y']
+            primary_formats = [f'%d{sep}%m{sep}%Y', f'%d{sep}%m{sep}%y']
+            fallback_formats = [f'%m{sep}%d{sep}%Y', f'%m{sep}%d{sep}%y']
         else:
-            formats = [f'%m{sep}%d{sep}%Y', f'%m{sep}%d{sep}%y']
+            primary_formats = [f'%m{sep}%d{sep}%Y', f'%m{sep}%d{sep}%y']
+            fallback_formats = [f'%d{sep}%m{sep}%Y', f'%d{sep}%m{sep}%y']
 
-        for fmt in formats:
+        # Try primary formats first (locale-preferred)
+        for fmt in primary_formats:
             try:
                 dt = datetime.strptime(date_str.strip(), fmt)
                 return dt.strftime('%Y-%m-%d')
             except ValueError:
                 continue
+
+        # Try fallback formats (opposite locale) if primary fails
+        for fmt in fallback_formats:
+            try:
+                dt = datetime.strptime(date_str.strip(), fmt)
+                return dt.strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+
         return None
 
     def extract_date(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[str]:
