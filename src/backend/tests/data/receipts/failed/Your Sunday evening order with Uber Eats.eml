@@ -1,0 +1,1094 @@
+Delivered-To: jordenautoexpense@gmail.com
+Received: by 2002:a05:6f02:20a5:b0:10f:b322:c0c8 with SMTP id f37csp457634rcd;
+        Fri, 6 Feb 2026 12:26:16 -0800 (PST)
+X-Received: by 2002:a17:90a:e70e:b0:354:c629:efb2 with SMTP id 98e67ed59e1d1-354c629f4aemr115083a91.24.1770409576625;
+        Fri, 06 Feb 2026 12:26:16 -0800 (PST)
+ARC-Seal: i=2; a=rsa-sha256; t=1770409576; cv=pass;
+        d=google.com; s=arc-20240605;
+        b=a4jUDrGQtpJvhN7dCnpg9aTRE2qg9Ry/jsuM+ShanX6TcM8az3S8uS8jWJjeBIYDjR
+         V1IwfYVBvTulSBY/dpNb2E9aCrXSazeCr8I7cQAxM6cbZIsTEA9qyhfDcadcJ6MjUjUp
+         LDLXHVErn8+4seSUiALJSS8Wl/XkhzdUnR9qSNvXt1Kr5AEZV9/jukj0UHgksTkQDCxB
+         S7vzPkdYTcaQmQe+4MVjhSaLSEESgycFFR4uH1IAa84SovLPk3D28//q/hlwRGAh1Z3S
+         V9Ql/N5w2P79acTTjU+KYpRI3oA74x5UROtyb13Lo4GYoJwSFTscEYyTi9lbcVx3SD5i
+         Dlsg==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=RikX1xS/fo6LBJOyi7p+KovafmexxXbvf5Z69UQOhyY=;
+        fh=SG9B3lVCnQQLZVp95ldgPH4+ZIy0m33l7biQXXXSe/M=;
+        b=P+ZrvOSRLahYh3yLd4caWRmVq0BzJziOb62efb4YFgzd69kPaMtVTu3mr/ylA4/ISs
+         3Z3Nm6SPvgULeW2dO6+NQ3vSMDDwsM1Up9ORzNAqhdn/3397o2VjvsA4kA3jL8QyjOYf
+         IoQmFyF6qlNK+VmXysxQHHrIOSQpZrHxCMWLQZESE7L2Ajo5mUj948ccfunJQ7vBzw17
+         EgprVDtjblmpdczgA2+zURca7waOu5h7VDgLOk9uIBoz11VpLI/fJ87c19oTbXdVQAY5
+         MUBx088POU54CH+mGwOCBL+GnDL7Fpoqg4BmmQ8yM6hBaADCSTqkkhaLGSu7NNHSU84V
+         lRIg==;
+        dara=google.com
+ARC-Authentication-Results: i=2; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=a9NjGrsm;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of maybejorden@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=maybejorden@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <maybejorden@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 98e67ed59e1d1-354b1e42214sor1959535a91.2.2026.02.06.12.26.16
+        for <jordenautoexpense@gmail.com>
+        (Google Transport Security);
+        Fri, 06 Feb 2026 12:26:16 -0800 (PST)
+Received-SPF: pass (google.com: domain of maybejorden@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=a9NjGrsm;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of maybejorden@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=maybejorden@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+ARC-Seal: i=1; a=rsa-sha256; t=1770409576; cv=none;
+        d=google.com; s=arc-20240605;
+        b=dB1z/S0JZxuzJAZXq5FAxfwVyO7LtTx2uPy+Tga2smtEkLg5BAcmaR/+wzpaAVx17b
+         DW0wO2cM4gXiPWXjJiAEABgrv8VEn/oI23v+MRPvd++2ac+pRYaztSDF7x/2IJsE4Xi9
+         XGYgQmlrrowOImtXQPsHfutbk/Om23pG04lyNHZChikWAYvzNWydVgwJKHHGVs1wByB5
+         8XrBbUHp8fsOG6XYZSEmEfT+8g9oUZIGJILwDIuaeGlnjlouQW5ktl0qxKKr9HpUASfU
+         7FECtbEY8cTlzHjwYyj55+O04yqx53OpFV/8K54Ih6p/ezDB2bxPjlqDSxl0QhcwFWIU
+         fa2A==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=RikX1xS/fo6LBJOyi7p+KovafmexxXbvf5Z69UQOhyY=;
+        fh=SG9B3lVCnQQLZVp95ldgPH4+ZIy0m33l7biQXXXSe/M=;
+        b=jO6FU+1MMw+i8Dm9l89XosaR5J+tHriF/eBvP83RylbsnzkZIaGXar3GukxASQf/hZ
+         Bh9jqqRn/ItTbjAH/kWRxsWs9kyh3XjnC4N8eAa9OfIh5OTf0vi1N8XbBZhI6+XRrH8S
+         yeF8vZ3zv4VTG5L88gRTgJSU6t26l7OQe1NmIcisk3C730qkGqx11fCDwHjjKYCeTuqC
+         VNTRn5XDrTKF2KO8RiOw1VTbLGoDsLBhhXz0yAWEQQvtikdl/Tsa6jKlyKQ4RrULUfib
+         uSrfGRaU3HckPTuOV+sRg8RGyuzrD/g4YfaMVFSriQ1Wv1WkNiKPN99E+2Ye3U3/P27D
+         Uv4w==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1770409576; x=1771014376; dara=google.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=RikX1xS/fo6LBJOyi7p+KovafmexxXbvf5Z69UQOhyY=;
+        b=a9NjGrsm2LhNDim4VCvcCzZLUfYIYLUSQAk9d8a5LLimdZywIG3oYd2sRyQEjp2tT2
+         c434a+/TXwv7SWVVQfTVNgf/yg0zKbGjddUVgZv7pO1BNZtyZW37Pueqt9TUYS+VL0B2
+         4fz+rSQbNhHcPH/Lf5km8MNyRReefIQSDoYIodr6gz11X0p8/lkgzjiZDO5z7DsLwZnV
+         trNzELOssU+JnTJysyJTmztyf8CGBD2/6uFJ9s7rpW92HBYKe1iNG+5YD936+sIyvKaA
+         j6Gaq+Ck/Ih86Kf4L+CI4UnpLYlDewu3WvBSHLXqFVKR/mMgh4Et4fcH9oQ3Vtvl7bA6
+         jEZA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1770409576; x=1771014376;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=RikX1xS/fo6LBJOyi7p+KovafmexxXbvf5Z69UQOhyY=;
+        b=E4aynLSnPzb380cm6w6C0WgQfNoG8SYfM36mtMTUp39xsgB03Vr7jBOB+eu5SxQRxZ
+         dGMDIZuzL0qw1Bit6v3RNyRv93TnqZNaSve/Em79K4Ss5t4TNEjzljULjRWTfPvjIIRD
+         6Aa3NKRZ269xxINgw5jrieW69DUYCYOMgZBJRVzY8USv0jLUoYFoZGSbJ2p94588eCiq
+         rg4D5cw3VK2A8Jro9K9IcoSSmtD86QYGlVvugE0HM0BiyMIsednG1oB/D9CXkLvHtr44
+         ys3xso5wNjRh6LCJtgkuDhm21DlytGnUkrbfIyp+3fsUIoJ6do8RvvgO845cXVtNSKky
+         Cw5A==
+X-Gm-Message-State: AOJu0YwhmTKcDFa3+R6kZuZs44NwJ/lwOWxtX3RiX3pTByTKrzr7p2MX
+	tNIZq6TXa/vxGJnPCsWVQFaPj64rUXoNj0fBfXo9sTSRJinrIBGad2HUDXFyAOLN8RBeMXKeRU9
+	Bw/Iuy12bjxkgCAvRBRGvlF4W/KSaXxRjMNwe
+X-Gm-Gg: AZuq6aIbz8dUrVxEMR6g8fHlQOHt7QppumrICE6iDkXYZ3GvQXgBY5wF6dNQ6h0x6ys
+	4pBw1smn/zUFcTbgobHq2kpwWCDnQWG/WNmAESIF09s0sqh8jFkTqszK571eoz/+1Pnz1Xztuzx
+	vwLR+MsEGc7zRSJbf10HMKaZE/uaqGYfhlCQOfGZqNuQO30ykSJ/s/oJUAEse6hP69dBJEHzy2W
+	qyv6N/J6mFEV6k1vigqnX8mVms26R2klacbATQR9W7H+ZIX444zMYHXHtzWSNQK+GgNg9g=
+X-Received: by 2002:a17:90b:2243:b0:340:c179:3657 with SMTP id
+ 98e67ed59e1d1-354b3e5ebd0mr3674992a91.33.1770409575249; Fri, 06 Feb 2026
+ 12:26:15 -0800 (PST)
+MIME-Version: 1.0
+References: <7006cad8-e2e3-5e01-aeb3-6ec37c937341@mail.uber.com>
+In-Reply-To: <7006cad8-e2e3-5e01-aeb3-6ec37c937341@mail.uber.com>
+From: Jorden Shaw <maybejorden@gmail.com>
+Date: Fri, 6 Feb 2026 16:26:03 -0400
+X-Gm-Features: AZwV_Qh9W4apukC5_AW_cI8-o-FtLw1i9F7iNS93wP5Vmlp4PVo-9V1Y-FNoD7A
+Message-ID: <CAHd=6UuGCs2fZ_OXjfYKE4S5POzb1g_e+qNqJ7Airgb8m32vnA@mail.gmail.com>
+Subject: Fwd: Your Sunday evening order with Uber Eats
+To: "jordenautoexpense@gmail.com" <jordenautoexpense@gmail.com>
+Content-Type: multipart/alternative; boundary="000000000000d6fa09064a2d99dd"
+
+--000000000000d6fa09064a2d99dd
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+---------- Forwarded message ---------
+From: Uber Receipts <noreply@uber.com>
+Date: Sun, 25 Jan 2026 at 22:47
+Subject: Your Sunday evening order with Uber Eats
+To: <maybejorden@gmail.com>
+
+
+Jan 25, 2026
+9:28 p.m.
+Tip
+Jan 25, 2026 , 9:28 p.m.
+Thanks for tipping, Jorden
+
+Here's your receipt for Pizza Pizza (Mumford Road).
+Total $48.26
+
+To view your full receipt go to Uber Eats
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVE0Xoi2=
+FBqrb2BOuLpBVPsap9ACcpRAR4Ku51YckSbDSW32O7XGxQzMW8lxo8MXpAMmNmvVGnckZPT3UaE=
+uAgtgcTNg0jxhXwCgKTS_vpkQBUek4ekKR8pyB-9y39enD6RTIM4iKamIfQDhCGLUF1h_3bzmE0=
+ILwF5Gyn73M4YEFAW0TjcAloZNGMJ7Q__ZW02wF4yI9h1dcDQoLele2CTUdAl0bXWGNE-Kh73N0=
+cwXqoDyppuVbip0Ez45ybCIjyGQbm08uPAAm2YSZkHHG5qiMnjaU-m6WKuNOmOK3cquIQUEdhcl=
+zWJSJtB9NuUiVDAYG_Fo204SBA3YsD2B55Hl_QZuSGijdBZQyQTX-0Dy4GJ-nT16XVMbN4-oT4U=
+AuVawD1USztNwYWsgMjd4ZFW09zgyu1sSvJtT3Vs-bYpfmMCjB03YVxy-rl_2EHM7KJItnD5rOl=
+ufWdbKgTBcUeNLbDDsy6SVpa5Yn-E4SFgzDhXOMFktBeAUDO5XfbMD5MDEHvpuIjhMnEJrO9J5o=
+AVutCZQDXeodtiRoHZnUyv3txrEtRP92Bnyu4bjV_zm_HNX77SzAlcMxkk6Qt1VVeWxKTaEGXz9=
+xiyfKC0a6S86M1vYweIeZ9KiSPJ4Lcp2zP74R7IvXLrnLjyMJ-8HDcnyYk6hDebyhA3Zu2QwVoT=
+jBnLcOaQ8vnnyKdNW5TaYjFGbg_mqOvoJ-96Lvh_Gc_TNRTfko6_Uqu7kLc3swlasKKB8gXfGIo=
+HtgHBzbzq1TX3WfTUXf86edUcyBmBqQI94=3D>,
+or download this PDF
+<https://tracking.ibt.uber.com/tracking/1/click/GDrXFMfr_7rSP5xE8pMTygRdsnl=
+ocNHUJcNtOWiseuDM3fW2lm1F1G6zBWWud6oHQrjCb9qoxVmZw2aTsIBR7rWBsGhPlHgdfnv1Sg=
+isugmvIjOB2if7_NN1p0gpk_ztMKGcipRhpCek1RySuHaDsfouQHgM6QnFjYqbmq33DuF9_3U41=
+wtPs2PVYswQZTB02eKzheQoDb2X3hMRNow2CsIs2cqvdFnb9xeKqaUIf_HVSwfhFU1Ui1HQJFSr=
+FTj1cis_cnyfk8SYrOXlvkgOb1fBUicDiExPrXkOLrgtShrGLXcHh51iqgl9qCkftCsjxyfDWt-=
+1yVBIW_N4B4FzHbIZAKKeSkVgsVcXpM2h1fX2VRORzi8IvCka93A6VZ7o8EOi-S9YdY2jrYcUeQ=
+rTbFJcnQrxMiOQdZdgiwlSi1gtXURMjazRDm5SUc2wBTkKFq1CFooeAtdI8B5faHABXdT8HOeu5=
+u4KseEshTwh9owBpMqI2HOlrm-KvgFs8Cv0kyPGv0--xpOSHD55Vg6zinTlLBoqIZ4mNQTPzHi3=
+lFkfy3gwXjgriF3ZmS-ZeVGQRMQwCt8KKdccdHDk-Y9DSumLV3qZGO2AyTD_JObJTsc6ezgSmIC=
+PNTMzCaDXVxjY0LSCOlt0Y2xD_ucQ8U3zdNE_IJXhtqTutDE2j3j25qC6DoREdOD5CqPQ760JrI=
+Jxc1zl21yQpPgbAO_6CDYGMIWTyxfJpEgIvxGexKkFS2aY2d6au9Joi098D-KtiXpp53OR08oL7=
+rqBNNZOiYcT5Q0G9OWKAOzx2q4iq-vhKlA=3D>
+Payments
+
+PayPal - maybejorden@gmail.com $45.26
+1/25/26 9:47 p.m.
+PayPal - maybejorden@gmail.com $3.00
+1/25/26 10:47 p.m.
+
+Want to switch your payment method?
+Switch
+<https://tracking.ibt.uber.com/tracking/1/click/6s2n-pfQ77j3exa1AZ_-HOJi1m2=
+IXh8cwhSE9CsoojtmGM8f5olmkevEr-i4reEPyvtd_KlG_ib6TxXO9sdjhG2AVmQ3Sq_zVT2Imy=
+tvDw-zAntskF8Z4-2SDNqht6Uoe1IRv7PQU4peDated_HFO_WVUpuJ013-saMCd4T1gceierbAR=
+hXuosXzy7aQNoAMIFyv0EhJQQsyiuznqVJ-c1LlAVhaIvN5vmj-OW5AdYDXo1t67P4ryjMXlB9e=
+4zA_GUyW7hrU5KqqAIUySyvU9Udu5aLImPoZRUOlBaNhmf1jQ7ae5BcebDk2TIiCp2EbgSzprZ1=
+wlb5KRV8GoI9owTmBHNTvaGdqHDKreqnNSz3Cz22bS1wtTu3HYZfZc55iw1LA3WzFxKgX85ELF_=
+1mq0FJsR_gfdHZq8aYBeZKK8KuoqEItaoLYVqYHWvwTxR_0Lu1j6xGSVkD_mVXgO-VG96QWyVKP=
+gVkX8NHBiaWup5blxx0yQMctK73lrJHWDhwE94OTRS12IbPj_BhCOZjeyzb88Lieli4kHPMcUOH=
+pfRAsaJ4Qrk7C6c1-H3dT0GhZBtRtV9e0cWvzSWvaaL_M3yRObEkcHzl_pIMT-7Xl3-UcLWiWu3=
+8IvfIfbncVxIbFxst5OryXX0rI49Ys5p6OvUrw4_OZHq8eLawt-mcTxOaMj6GqYAr-YHKs9OYrV=
+f5Laba9fwEJoOy6xmpH4RWNKxMSpYtvfunSLnwlNTyr2pf04siB_mcUPAV-pK6Jh8TC0ilhKFxM=
+2WPPfzptnovs91xUOHbLAwRMV6BDYZHoSUzeBkpt6ul_8yehwgLO6uIukcFdm1mclJmwTsMev2t=
+lhzuirVrbki0klJFY9VKPsHyvs6FmWwnkVMUBHxaeIikbwuHrZvVOmVSaXgAKwZvfirgvyhmNwf=
+kiy3mBv4eiPQfvSFO95h2W9eodQ89VZqfoHxLSg0NHG1K_H1PdPQHQSxSsLNC0121p-iD3TpFgJ=
+ElpreDFWgUoy7NfMMUvGwfG0fdSZ95teW1HWN4q6I1jw=3D=3D>
+
+Order Details
+Uber Delivery
+9:40 p.m. - Pickup
+6954 Mumford Rd, Halifax, NS B3L 4V9, CA
+9:46 p.m. - Delivery
+6286 Chebucto Rd, Halifax, NS B3L 1K8, CA
+9:40 p.m. - Pickup
+6954 Mumford Rd, Halifax, NS B3L 4V9, CA
+9:46 p.m. - Delivery
+6286 Chebucto Rd, Halifax, NS B3L 1K8, CA
+
+Delivered by SATVIKSINH
+Order completed Jan 25, 2026 at 9:46 p.m.
+
+Want to review your order history? My orders
+<https://tracking.ibt.uber.com/tracking/1/click/ft0kt_aVYsoa3NKr680PW-ul448=
+Si19ggPolnKRu79QChVba5inuabUJdYXI8-997RMGqq1VkTXfbu5_bbNVR0mSyaJr0RidXGIccb=
+LLc53vcd2uxptIe0eM1IXl632xyFwtkuo9a1smf9eZHsQccph82kBZFS29D1hB9BJUN78FSruli=
+XzZVB0Raft6g0OIUeC8UszyqnVK1XbdYy7hSnyaC6TIkthjY-S-i0aSnXs_83KipStuw-uIpoq4=
+7yrD_BLhpGqD-B7uWtCIwli0D6bVC8VsW38kNrpjT-P7MEyqLBiWSP7v5YOnm7VV1aXj5Il6_B5=
+bNjNeVugsnL6WnMB2S9skp9s9XkwQF5wh-7_Z-M3v3LV1jnRBtCDMhU-t_0Cy4kbaNob-OF5bNy=
+hXtdfbg5QdO9IuPElpRwfemceP1uNpkM7CGr5nZFlCLzmXKbmIPU1YCCTZJDgyLOs2hPpNBPhGV=
+8_GtabiL5O1grzNPuaJ-1X011sCq9zjPx-G0vzNrhPhvhqTygxRgHYWOVXnC0PzeRZf3uTB_Gua=
+lM-L9ADcj5GCGx5CZlbl1x_KS2S_k47KjIq4iJRUnhk8zCT7HfHcLtFbR_Wudil392m1ertMeHz=
+_M40P5MO2urqoaIGZObuZ-iK6klX9c_CEnwcWkvJVe3x9BprpEfyLc1-jCIwLzGHNvBj8MZ0bUz=
+oa3ZsQwnhuDAngVKX2kdWoKNTjQ7a30k1VUoAtuwQXdhmGNNvdZj2QAozH0InW1Pcs4_AIXkzGO=
+MyALyVG7-LSRg=3D=3D>
+
+Need help?
+Our support team is happy to help with any concern you might have.
+Contact support
+<https://tracking.ibt.uber.com/tracking/1/click/ft0kt_aVYsoa3NKr680PW7VC57s=
+3KIysSNS_VGCzxY-Wcds2YAYdOoAXrPdSroATFe6sp0etwghaIhSAt-pGKvF0Silwf3HJ2UdGnt=
+c50zwu0gcccdJXLl8RoTbrkj7z1EphWvetcRQH6rkHb-VvMPS4PpytVaJ3LLo4VchpEDlgzBq95=
+lV012MFHCeimPRnw5Gd5OYFLYaL9fBY97RiLqNvkrZr9nPz6APSbeGbVAVKg8UYG2MCWULG_sjK=
+ybL5SKBQfGOmySJjQBe3T29mDTAnU3_WF0hngO8iaf3DZmEoeBQoqGR5GOOpV9PNAvm_Aph86_G=
+uodVgsuG25pmDZ55INirqrmp3y13OVqw33YKqTGLoVyiHmpA5anDdX2A6GKGzltZTt1vNVHFzhR=
+F-wWEWH0irDOJLgrBtLAWdRqik01Bhcsoyr2i8UjaMks1yEZYVO3nV7u8ikg3y7dm3kE--j_wng=
+8if0yFoJj87OLRNvAggs5EZRD12GCN1Zw3uavV_Ju2Z0G2VLA5ycXcHHPj3mqWGn8iIqiei10PD=
+4bDJ2QO6sHv04-SXpAvavn-UsNaPEm-KHNKeZXLaub573Y7bEgTlZW8GHgijVI19oBIfugUAqjm=
+RDAZEOXp2Rus21IBtaLMFcYcRWq9FbpOn65lfjJf9Dv14Wc7MBLOfr6BtuLotB-KATel-hQy1pF=
+LPjjS9rj37rqHxEbYJ7YXPxsEDAnuVTkkG76ZWznpy_w94EorDz12YPMIrId6JZ1N2>
+xidb9f4dff2-c881-502a-82e8-79eff4552f18
+pGvlI2ANUbXFfyEOgxta1RMV082993
+My Account
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVEOM521=
+Jk1rAdhxDEaPKy6YvJY8MdjNAgaVKKPnXAAfZwcK4tIELB_YWCIa7JWWooL__NSLux19O5wQCyV=
+m2s3OPqy6Bh1Cqb1KD9pt1zERQY5-vO7Vrw7r0L1-Md85HTRi0ajU8_Qja5WkvqcAZ_j9mvoAkT=
+jSA-vE3VauJcxcNr3PphoBGOcGe0fkGdSM4Rr7aiI2nGhCYLeILW1vdZqXITdmhmYG2U8urFZue=
+RNhyB0vHTYu5er2DFp37XZ7lvyL2h1KX6pbgxthnjhhrsMjMdbeRRF9Ocq8imWN_x6fvOguYT7b=
+nkBi-acfPN5KaCQRskqXPYzJKwjYp6EYLm7u_HptOW1eqe8BVP9tj5OxwPc1SYFbNewzMYPuAZs=
+c94noaUHNpLZ10Tm7RkT35e9YeDeqrc-IG9u_0ZNDyyUNZDGVCRtAFYXdpM9i05ZAtfUxcQPlDv=
+kHBVbNbPy65GRh8qJTS-KnmqIBhuidBkB7KsB-_gRsZI0QybXY-yhJRViEl8uP76cAKXTtA2z8v=
+-P-QxMu9rUxFVmj3v2X1TPbUGc9JkpTTIs5UrGmbSJ-EYKsH4b38xO5UjuuPdHWlF2Q7iB2bgx-=
+leet960EMrx3VatdxPr6W0OwccVha9H2wWnVgs8Ii9hErv7WtHr1CT5T8pnNSjKiweDGe57JzJ1=
+uE79BdzZ-jEEBU9dfheWGaFBqp-gBl1_e_snOfgteNfFaI_1XQMt-cQtu0FV5yd-Tu>
+
+Privacy policy
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVAc-51q=
+JPdLuuUvOgqOXtafByoBzO1vCu3xn7pmDMz2py9yy1sW9fvuV4Wey6zhCCTMQY-llNiUpKNqJ-W=
+QQ2osi7a3bhRRVsaOolSkCklUnDERvghUn1LXtfonWi06-PFGzYe5hu5kPYHigJKYrnGNskYvxn=
+hp0vlprBXIcZn82j8NcvkdvNxOEsikmZdbaVRrQfptSJQmjJVmv5wA2yRhoIuw82sw7J8U1-eDi=
+F9fO6JuqP54PnVVSE8WDX66F_GvDjfSYq-IKhmdO0HsyejaBGnziVac-ASC_utGgx_wDBiDkPL1=
+DuRomoamzqTFOebZVOiqijYJ-_Hz0aWpvFVwiKlaXeLInx0ySf0IyKhAMA331Vu2czc_hsrgbte=
+VVyWMxCbLCt1hGCICxCZjkvDuNXnDXLNWU-5tDMCc6xmT5pMaTDa4QKI2730zZSIDvqBwzQGqtr=
+wPmNIIkG5wqOoqqudSdjQPVJK3ph9zVjNVvd_d2CcgruDfGj2LYOq_Mx67NFKWA9eBckKsmAQrY=
+Ai1Uj6cEb5rUbufQIQt3zmfwH71RHHLtn9-vZKXdLjy1jvmJxP7TccZZ-Eol5Cjx08XDUNiKI9Q=
+fvlJ-QCzssMSCFkOHkIGhse911r4skzW7Ovf_ZywLr1xtXbliaifesN6djUivWAYgb8lgDQuljH=
+A5Ko_hcmI7dCxf40zRhqUVHDVcvJj7ADylxPbW6XRxbAaRW_vTSUrnVsECHDLPQVZD0llXd9nuu=
+nBZOAzjsMpepA=3D=3D>
+
+Terms and Conditions
+<https://tracking.ibt.uber.com/tracking/1/click/lenjdmk3B7LiIv2b3Aj17gLToqw=
+BzK6k4kTkThN-kYxCe2dEONsmN9IuY_RXALo6YGwnsg4km90ui-1qKhVxiw8Fie34q_oXVlhIKD=
+p5R56ls9UArGtWEC86YRq_WuQBVv-v888WG3K3hatc7FswMXoFEs7_NnvvnIsJ-d42glEmwhYo7=
+mL-P4aEr6Ap1kthjCgX0Lxbt7xOi78iqduHKz9tQHG5-M7-DCjnhgdh7NKCZ9m4vwNS4QBAJxlM=
+9zUXBX5vIM578M7geAxUmuPIgkvbeQaUb6W2fWxRI6KS3_S85LTKtw-N7nRWW342Bb64Kk9mOuE=
+T8YrmSslmxYuRZgmUTDTBKxU3w9_w1gl9dOheNYcpxpIxpJ-dpjZ45G-AXu8le8fr6w5x8z99-K=
+JAJdui0bAMNPsCYSd_8XUqD3JWh6ctNdKrbD8ZGJGKLQTwDh5gTaQgnRu9v694X2PJPA36vZeii=
+hrGRLA6K2g3yk0kT19CzRrQQs6OYvU1bMNQ1WhuhQUiUEG8zjZsqGEMMK8nIyhnheiMfNR0BjJm=
+zWr7sR1XunkxBGyY42seCDbT_0FjmpIWQpf3u4tzbl864wwbf8qKZG3JHDfWUsKn228V6lwK6bP=
+282kCOpxSV2Bc5rlQ9duf-2XjbEarozrCfSF4FBQaPEBUWxNOF9p14oGxupFSdwWg2fgAjLpDSW=
+KR8eht0zR0KEbVrklQ4Iecd9aGy5p70PHTienbB89KjtmIy33s6wJu0Lsrx5j6PLC7>
+
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGplnYF=
+B_YOYoIy-2y3jEwPzhdsdawyL6D3kZb28jh1iUD2CU6JSpDvHyqBvQobvfjDjtAey811_KCnxYM=
+dMPPkpXuJDXCx3Nmo1_13cm8ktA6467XgNBN_x48UfCtAE0kjqUcggXxGLg3xXPlt5xD8HaIqmM=
+ptvGsIdEhcHfFhS8DVa2kd7LBrJ26D3i9q21ic1hpfmrRAD0Zq4a6MFeByZzwNjD68n-pMv5Ifj=
+WJUufcZP_d4FrnFs0XV0ApofDy5PpC8eeNXUNmjTebNUtsbvQprwUK8xc5VAb2kZq9W0wD2QB0Y=
+2iRvqPOuHLvpX4szqKh2ray9VECNLjzMrnrakpknmEpicf0sOzD7MtE4xQzoptK76xxiL5i9WFh=
+K2O7NqAQZiE_yzrRuRyzAxdvzPwfPJck7A3Tsf8jROZv5dBymvWO88HkECUjNTsg0Iq2jN9FsUT=
+SJ6ODm6LU9rJ1JDSNspVQoe9ELbJNwrd1vf96OGheJcLY_GD0BViFaCWPJL85B_CLtgyCpmj6Vv=
+vTuuBtTt3AfAw8tOUNGqqOuWihZxX_E3XyjYqbutjuSishabXuSoeMbLrd12lrKLOPFQdReVvjQ=
+Dwk9yrL_AQsTCdW4qNmdYsiiI-70GRs4ZuhyGnbaVBHnyfhjGaxxGU6u7-NoqG8goCFbdPkZvTq=
+QhuODFVdaHUOJYvsNC9Mt64b9Vx7V91YNM_076OSxG2zW77VDLB8oYteT_yQg_xe7C>
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGplnYF=
+B_YOYoIy-2y3jEwPS7XkSZPIQQqozN6RgJ81PYnnqcaa7Hv9ITpD_P9KLjfjFDvbtDVJuIomzlS=
+9RlUGAiQvJA7LMkg6K9jtzzjD0px87-mHt9HbbBBItPuF3LaJc_fPgWIw2Als_AtXJxCWo5j8pK=
+Z8eynS6wgAiyl0nNmH8nZqwZjlXByAV4QcOYyMAS3y-aOP11G9WiX-2MG__ARZVMfRT5nOkfEUY=
+pQhoUT9pKxqt6IzndPC9tA_iXQbEux070VToGIJCFuz1V_JxeI7ghpDZQH8FUvAsY8Xzt8YGZWP=
+Hww8HR41-r0uzUCyozQOnFK2ImQDw_TC2ApPwIN8WpWHhNdyofKR-v7mspsDCESZa9iJIZY48yI=
+b6xjWZPab7DlSscmQPt9YpUGNdnZu5JV29sRu3t1JPFSIGdO_NbID5Hf8gh_YDk4DVyxyNW5z56=
+QSgQFErk52kVZX7i41tgyPfAexAUnwdgFlOkr0qDHEbXs2zpNO7-d_cUUgO-f9vDSRXszabVN1B=
+EWqESmBGvgtVDI04a_wJJM_LoYlweWQFnzjz5XmEwm_CO1CBTGGtu_FJfcFf888Altf9bhhmuNn=
+hUKiSnGVKKRvOZ2L76XJK7yXacsh1OT3k2mq_pRiR8VdH5r5VsoLMcj_NsrLlpRmjTaT8jow0LE=
+OUBZ5o0v2xueUJNsklidkQDrKOznNDp_PC3lWARyBFfDdqFxIHu_eCth0buPBBA4fMycDh2tLCV=
+LyR6ajtEBtFjg=3D=3D>
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGDB61w=
+CoykUX4b1e-UihxIONlybxhMXVPOdNFEp3Gresf9kinjb_kpzHcdLZUJHbTdohkNhV_J3JnB01h=
+47CbDm0cSFncwhR4uwoYzTXncnFlLCYbHJKIOiQ_X7Oy8Y61pRQfeMlo8fyW5J6eLLnY59QUIc3=
+yaDbpk4JyiOl2NKeZ1Awkk18azj-V89nk5X7iLO2P2GOy-JWKYgPqwp1rIHEXDSuSbOJgzG7XJz=
+xGUHmMkrsvrZ2ukpgRrtiWDUkUXQiNINXs9ZGlo_O2-e4jYhvB9pAKZQUbv3E97sdkmK-CPu7Vf=
+ywBE5oe8OIU6SqFYOSCY62bCcPQva_WT0XvE6LVOtWpJorUFboF_yg0vXx8SnmyO779-146OGaT=
+h9jmPqee2YpWB63K6jaulX79XL-ufvJin5v82xszMfXuLahNskie3N8CiTJhycbvlSODjQLB1s0=
+3tr6uJD7i-Fjw6nZn4BI1y3I8t_bmkv2oNMb6ku6uex-1sOKGkpTX1Qq6rHg-60k4uhwUtz7Ndq=
+c39zzKj-84cMmjpswGMDP_LDCxEv7mfWIELBk0gGqIXZf6-T6waGRUHAP-3DTwFujmS6M0hWGBD=
+t1EfHQwCtkggj4SNLQPg-yX57_FIRsDu59KVwstSN91qrrH9eHmG1bZJfQ2EgdedbrCHl2aDwlT=
+GpIyaG4OocJn3Gkz8xQFSxowOe3XHK_OoB3DhTUZf_Q1MZASP4JsXvHMOJovmZBv134r-1ftjIc=
+hbBn64MXpTqiA=3D=3D>
+Uber Portier Canada Inc.
+66 Wellington Street West
+Suite 5300, TD Bank Tower
+Toronto ON M5K 1E6
+My Account
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVEOM521=
+Jk1rAdhxDEaPKy6YvJY8MdjNAgaVKKPnXAAfZwcK4tIELB_YWCIa7JWWooL__NSLux19O5wQCyV=
+m2s3OPqy6Bh1Cqb1KD9pt1zERQY5-vO7Vrw7r0L1-Md85HTRi0ajU8_Qja5WkvqcAZ_j9mvoAkT=
+jSA-vE3VauJcxcNr3PphoBGOcGe0fkGdSM4Rr7aiI2nGhCYLeILW1vdZqXITdmhmYG2U8urFZue=
+RNhyB0vHTYu5er2DFp37XZ7lvyL2h1KX6pbgxthnjhhrsMjMdbeRRF9Ocq8imWN_x6fvOguYT7b=
+nkBi-acfPN5KaCQRskqXPYzJKwjYp6EYLm7u_HptOW1eqe8BVP9tj5OxwPc1SYFbNewzMYPuAZs=
+c94noaUHNpLZ10Tm7RkT35e9YeDeqrc-IG9u_0ZNDyyUNZDGVCRtAFYXdpM9i05ZAtfUxcQPlDv=
+kHBVbNbPy65GRh8qJTS-KnmqIBhuidBkB7KsB-_gRsZI0QybXY-yhJRViEl8uP76cAKXTtA2z8v=
+-P-QxMu9rUxFVmj3v2X1TPbUGc9JkpTTIs5UrGmbSJ-EYKsH4b38xO5UjuuPdHWlF2Q7iB2bgx-=
+leet960EMrx3VatdxPr6W0OwccVha9H2wWnVgs8Ii9hErv7WtHr1CT5T8pnNSjKiweDGe57JzJ1=
+uE79BdzZ-jEEBU9dfheWGaFBqp-gBl1_e_snOfgteNfFaI_1XQMt-cQtu0FV5yd-Tu>
+Privacy policy
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVAc-51q=
+JPdLuuUvOgqOXtafByoBzO1vCu3xn7pmDMz2py9yy1sW9fvuV4Wey6zhCCTMQY-llNiUpKNqJ-W=
+QQ2osi7a3bhRRVsaOolSkCklUnDERvghUn1LXtfonWi06-PFGzYe5hu5kPYHigJKYrnGNskYvxn=
+hp0vlprBXIcZn82j8NcvkdvNxOEsikmZdbaVRrQfptSJQmjJVmv5wA2yRhoIuw82sw7J8U1-eDi=
+F9fO6JuqP54PnVVSE8WDX66F_GvDjfSYq-IKhmdO0HsyejaBGnziVac-ASC_utGgx_wDBiDkPL1=
+DuRomoamzqTFOebZVOiqijYJ-_Hz0aWpvFVwiKlaXeLInx0ySf0IyKhAMA331Vu2czc_hsrgbte=
+VVyWMxCbLCt1hGCICxCZjkvDuNXnDXLNWU-5tDMCc6xmT5pMaTDa4QKI2730zZSIDvqBwzQGqtr=
+wPmNIIkG5wqOoqqudSdjQPVJK3ph9zVjNVvd_d2CcgruDfGj2LYOq_Mx67NFKWA9eBckKsmAQrY=
+Ai1Uj6cEb5rUbufQIQt3zmfwH71RHHLtn9-vZKXdLjy1jvmJxP7TccZZ-Eol5Cjx08XDUNiKI9Q=
+fvlJ-QCzssMSCFkOHkIGhse911r4skzW7Ovf_ZywLr1xtXbliaifesN6djUivWAYgb8lgDQuljH=
+A5Ko_hcmI7dCxf40zRhqUVHDVcvJj7ADylxPbW6XRxbAaRW_vTSUrnVsECHDLPQVZD0llXd9nuu=
+nBZOAzjsMpepA=3D=3D>
+Terms and Conditions
+<https://tracking.ibt.uber.com/tracking/1/click/lenjdmk3B7LiIv2b3Aj17gLToqw=
+BzK6k4kTkThN-kYxCe2dEONsmN9IuY_RXALo6YGwnsg4km90ui-1qKhVxiw8Fie34q_oXVlhIKD=
+p5R56ls9UArGtWEC86YRq_WuQBVv-v888WG3K3hatc7FswMXoFEs7_NnvvnIsJ-d42glEmwhYo7=
+mL-P4aEr6Ap1kthjCgX0Lxbt7xOi78iqduHKz9tQHG5-M7-DCjnhgdh7NKCZ9m4vwNS4QBAJxlM=
+9zUXBX5vIM578M7geAxUmuPIgkvbeQaUb6W2fWxRI6KS3_S85LTKtw-N7nRWW342Bb64Kk9mOuE=
+T8YrmSslmxYuRZgmUTDTBKxU3w9_w1gl9dOheNYcpxpIxpJ-dpjZ45G-AXu8le8fr6w5x8z99-K=
+JAJdui0bAMNPsCYSd_8XUqD3JWh6ctNdKrbD8ZGJGKLQTwDh5gTaQgnRu9v694X2PJPA36vZeii=
+hrGRLA6K2g3yk0kT19CzRrQQs6OYvU1bMNQ1WhuhQUiUEG8zjZsqGEMMK8nIyhnheiMfNR0BjJm=
+zWr7sR1XunkxBGyY42seCDbT_0FjmpIWQpf3u4tzbl864wwbf8qKZG3JHDfWUsKn228V6lwK6bP=
+282kCOpxSV2Bc5rlQ9duf-2XjbEarozrCfSF4FBQaPEBUWxNOF9p14oGxupFSdwWg2fgAjLpDSW=
+KR8eht0zR0KEbVrklQ4Iecd9aGy5p70PHTienbB89KjtmIy33s6wJu0Lsrx5j6PLC7>
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGplnYF=
+B_YOYoIy-2y3jEwPzhdsdawyL6D3kZb28jh1iUD2CU6JSpDvHyqBvQobvfjDjtAey811_KCnxYM=
+dMPPkpXuJDXCx3Nmo1_13cm8ktA6467XgNBN_x48UfCtAE0kjqUcggXxGLg3xXPlt5xD8HaIqmM=
+ptvGsIdEhcHfFhS8DVa2kd7LBrJ26D3i9q21ic1hpfmrRAD0Zq4a6MFeByZzwNjD68n-pMv5Ifj=
+WJUufcZP_d4FrnFs0XV0ApofDy5PpC8eeNXUNmjTebNUtsbvQprwUK8xc5VAb2kZq9W0wD2QB0Y=
+2iRvqPOuHLvpX4szqKh2ray9VECNLjzMrnrakpknmEpicf0sOzD7MtE4xQzoptK76xxiL5i9WFh=
+K2O7NqAQZiE_yzrRuRyzAxdvzPwfPJck7A3Tsf8jROZv5dBymvWO88HkECUjNTsg0Iq2jN9FsUT=
+SJ6ODm6LU9rJ1JDSNspVQoe9ELbJNwrd1vf96OGheJcLY_GD0BViFaCWPJL85B_CLtgyCpmj6Vv=
+vTuuBtTt3AfAw8tOUNGqqOuWihZxX_E3XyjYqbutjuSishabXuSoeMbLrd12lrKLOPFQdReVvjQ=
+Dwk9yrL_AQsTCdW4qNmdYsiiI-70GRs4ZuhyGnbaVBHnyfhjGaxxGU6u7-NoqG8goCFbdPkZvTq=
+QhuODFVdaHUOJYvsNC9Mt64b9Vx7V91YNM_076OSxG2zW77VDLB8oYteT_yQg_xe7C>
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGplnYF=
+B_YOYoIy-2y3jEwPS7XkSZPIQQqozN6RgJ81PYnnqcaa7Hv9ITpD_P9KLjfjFDvbtDVJuIomzlS=
+9RlUGAiQvJA7LMkg6K9jtzzjD0px87-mHt9HbbBBItPuF3LaJc_fPgWIw2Als_AtXJxCWo5j8pK=
+Z8eynS6wgAiyl0nNmH8nZqwZjlXByAV4QcOYyMAS3y-aOP11G9WiX-2MG__ARZVMfRT5nOkfEUY=
+pQhoUT9pKxqt6IzndPC9tA_iXQbEux070VToGIJCFuz1V_JxeI7ghpDZQH8FUvAsY8Xzt8YGZWP=
+Hww8HR41-r0uzUCyozQOnFK2ImQDw_TC2ApPwIN8WpWHhNdyofKR-v7mspsDCESZa9iJIZY48yI=
+b6xjWZPab7DlSscmQPt9YpUGNdnZu5JV29sRu3t1JPFSIGdO_NbID5Hf8gh_YDk4DVyxyNW5z56=
+QSgQFErk52kVZX7i41tgyPfAexAUnwdgFlOkr0qDHEbXs2zpNO7-d_cUUgO-f9vDSRXszabVN1B=
+EWqESmBGvgtVDI04a_wJJM_LoYlweWQFnzjz5XmEwm_CO1CBTGGtu_FJfcFf888Altf9bhhmuNn=
+hUKiSnGVKKRvOZ2L76XJK7yXacsh1OT3k2mq_pRiR8VdH5r5VsoLMcj_NsrLlpRmjTaT8jow0LE=
+OUBZ5o0v2xueUJNsklidkQDrKOznNDp_PC3lWARyBFfDdqFxIHu_eCth0buPBBA4fMycDh2tLCV=
+LyR6ajtEBtFjg=3D=3D>
+<https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGDB61w=
+CoykUX4b1e-UihxIONlybxhMXVPOdNFEp3Gresf9kinjb_kpzHcdLZUJHbTdohkNhV_J3JnB01h=
+47CbDm0cSFncwhR4uwoYzTXncnFlLCYbHJKIOiQ_X7Oy8Y61pRQfeMlo8fyW5J6eLLnY59QUIc3=
+yaDbpk4JyiOl2NKeZ1Awkk18azj-V89nk5X7iLO2P2GOy-JWKYgPqwp1rIHEXDSuSbOJgzG7XJz=
+xGUHmMkrsvrZ2ukpgRrtiWDUkUXQiNINXs9ZGlo_O2-e4jYhvB9pAKZQUbv3E97sdkmK-CPu7Vf=
+ywBE5oe8OIU6SqFYOSCY62bCcPQva_WT0XvE6LVOtWpJorUFboF_yg0vXx8SnmyO779-146OGaT=
+h9jmPqee2YpWB63K6jaulX79XL-ufvJin5v82xszMfXuLahNskie3N8CiTJhycbvlSODjQLB1s0=
+3tr6uJD7i-Fjw6nZn4BI1y3I8t_bmkv2oNMb6ku6uex-1sOKGkpTX1Qq6rHg-60k4uhwUtz7Ndq=
+c39zzKj-84cMmjpswGMDP_LDCxEv7mfWIELBk0gGqIXZf6-T6waGRUHAP-3DTwFujmS6M0hWGBD=
+t1EfHQwCtkggj4SNLQPg-yX57_FIRsDu59KVwstSN91qrrH9eHmG1bZJfQ2EgdedbrCHl2aDwlT=
+GpIyaG4OocJn3Gkz8xQFSxowOe3XHK_OoB3DhTUZf_Q1MZASP4JsXvHMOJovmZBv134r-1ftjIc=
+hbBn64MXpTqiA=3D=3D>
+
+--000000000000d6fa09064a2d99dd
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr"><br><br><div class=3D"gmail_quote gmail_quote_container"><=
+div dir=3D"ltr" class=3D"gmail_attr">---------- Forwarded message ---------=
+<br>From: <strong class=3D"gmail_sendername" dir=3D"auto">Uber Receipts</st=
+rong> <span dir=3D"auto">&lt;<a href=3D"mailto:noreply@uber.com">noreply@ub=
+er.com</a>&gt;</span><br>Date: Sun, 25 Jan 2026 at 22:47<br>Subject: Your S=
+unday evening order with Uber Eats<br>To:  &lt;<a href=3D"mailto:maybejorde=
+n@gmail.com">maybejorden@gmail.com</a>&gt;<br></div><br><br><div class=3D"m=
+sg-8250285558033874790"><u></u><div style=3D"background-color:#d6d6d5"><img=
+ alt=3D"" src=3D"https://tracking.ibt.uber.com/tracking/1/open/lenjdmk3B7Li=
+Iv2b3Aj17jv3t5A8EYT8KsfZOcu_WZYWNiz7cFlIi8gQiTQHVonSAO9vzQE-lNX_5nvednzKVmw=
+fQ2dRt8dBvEtY9rDQSWXG-MVMHrs7y7M4i6O1i28hlqtTSZJ5esbn-VdvTUY1zUPv8YwICmXvKt=
+UFmNgGnknP5dqGZ-N-RGpsaOtFtHRrCJZGjVnEwijLAGYIWyXy7PyzYP8Ro_enlN1AkxHHn-Fdm=
+U74YPqn8ik2jYQ75YJAnfG9FaMBcMpinlB8p4ViHYjmn2z52JpfT6bG-AXK4dRsqjFwIA9SPMBg=
+fpmlXDKOnDPniTjxIIkIXuqkXeUkfSHJSNI3W8etc-Ggc0z5fSzjFSxbn-OdnOJbAW-oAsfx5uS=
+f8VADFDs2aTiHAfHKPWwosb7JfkyMrg2VL5F1eRZ1jdFuKCwSP4yopdWhddA--Ycx7KcIomMBBP=
+zCnxXNE2QLCzl8lnLFINK8bZoHRI_4sfbBUGDeh7yn92LxScICTQ9FDuxu9CMNVJhWNLEuSw4bP=
+pzo9wnAPsIOipoYlEYV0x_XqepOFdOehVLTvWixArTXAcQmYdgiYQrtlVrdP5EhWYJf7La3tf8Z=
+yttTpKt8jk5I2IRluMhjC06U7RzO5b-TtggF9dA0gVffKgOrYS-DyXFtSCHyFUlHbpda33V-iSY=
+7iaFqtryIiXuei0uvDrNIHcDAs_FZNi22qo7_BH9d9hA3IBG2zXcy6FglcBE8N_RT2IPZcc1V56=
+spT025" width=3D"1" height=3D"1"><table width=3D"100%" border=3D"0" cellpad=
+ding=3D"0" cellspacing=3D"0" style=3D"border:none;border-collapse:collapse;=
+border-spacing:0;width:100%"><tbody><tr><td></td><td align=3D"center" width=
+=3D"700"><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" style=3D"width:100%;max-width:700px;font-size:=
+16px"><tbody><tr><td><div><div style=3D"background:#e8e8e8;background-color=
+:#e8e8e8;color:#000" dir=3D"ltr"><table align=3D"center" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"background:#e=
+8e8e8;background-color:#e8e8e8;color:#000;width:100%;table-layout:fixed"><t=
+body><tr><td class=3D"m_-8250285558033874790header-table-cell" style=3D"wid=
+th:70%;vertical-align:middle;padding-left:48px;padding-right:0;padding-bott=
+om:32px;padding-top:32px"><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation"><tbody><tr><td><img src=3D"https://tb-static.u=
+ber.com/prod/receipts/cdn/receipts-v4/eats-logo.png" width=3D"169" height=
+=3D"44"></td></tr></tbody></table></td><td class=3D"m_-8250285558033874790d=
+esktop-content m_-8250285558033874790header-table-cell-with-text" style=3D"=
+width:30%;padding-left:0;padding-right:63px;padding-bottom:0;padding-top:32=
+px;font-family:UberMoveTextMedium,Arial,sans-serif;font-size:12px;line-heig=
+ht:16px;font-size:.75rem;line-height:1rem;text-align:right;font-weight:500;=
+vertical-align:top;color:#4b4b4b" align=3D"right"><div style=3D"color:#4b4b=
+4b">Jan 25, 2026</div><div style=3D"color:#4b4b4b">9:28 p.m.</div></td></tr=
+></tbody></table><table align=3D"center" border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation" style=3D"background:#e8e8e8;background=
+-color:#e8e8e8;color:#000;width:100%;table-layout:fixed"><tbody><tr><td cla=
+ss=3D"m_-8250285558033874790header-table-cell-with-text" style=3D"padding-t=
+op:8px;padding-left:63px"><div><table border=3D"0" cellpadding=3D"0" cellsp=
+acing=3D"0" role=3D"presentation"><tbody><tr style=3D"margin-bottom:16px;di=
+splay:block"><td dir=3D"ltr" style=3D"background:#276ef1;padding-left:4px;p=
+adding-right:4px;border-radius:5px"><table><tbody><tr><td valign=3D"middle"=
+ style=3D"padding-right:4px;vertical-align:middle"><img src=3D"https://tb-s=
+tatic.uber.com/prod/receipts/cdn/receipts-v4/icon_receipt_status_tipped_lig=
+ht.png" height=3D"12" width=3D"12"></td><td style=3D"color:#eff4fe;font-fam=
+ily:UberMoveTextRegular,Arial,sans-serif;font-weight:500;font-size:12px;fon=
+t-size:.75rem;line-height:16px;line-height:1rem;padding-top:4px;padding-bot=
+tom:4px">Tip</td></tr></tbody></table></td></tr></tbody></table></div></td>=
+</tr><tr style=3D"display:none" class=3D"m_-8250285558033874790mobile-conte=
+nt"><td class=3D"m_-8250285558033874790mobile-column m_-8250285558033874790=
+header-table-cell-with-text" style=3D"width:65%;padding-left:48px;padding-r=
+ight:0;padding-bottom:16px;padding-top:0;font-size:14px;line-height:16px;fo=
+nt-size:.875rem;line-height:1rem;font-family:UberMoveTextMedium,Arial,sans-=
+serif;padding-left:15px;padding-top:10px;font-weight:500"><div style=3D"col=
+or:#4b4b4b">Jan 25, 2026 , 9:28 p.m.</div></td></tr><tr><td><table width=3D=
+"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentatio=
+n"><tbody><tr><td class=3D"m_-8250285558033874790header-table-cell-with-tex=
+t" style=3D"width:70%;padding-left:63px;padding-right:16px;padding-bottom:3=
+2px"><div style=3D"font-size:44px;font-size:2.75rem;line-height:52px;line-h=
+eight:3.25rem;font-family:UberMoveBold,Arial,sans-serif;font-weight:700;wor=
+d-wrap:break-word">Thanks for tipping, Jorden</div><br><div style=3D"font-s=
+ize:18px;font-size:1.125rem;line-height:28px;line-height:1.75rem;font-famil=
+y:UberMoveTextRegular,Arial,sans-serif;font-weight:400">Here&#39;s your rec=
+eipt for Pizza Pizza (Mumford Road).</div></td><td class=3D"m_-825028555803=
+3874790desktop-content m_-8250285558033874790header-table-cell" style=3D"wi=
+dth:30%;text-align:right;padding-left:0;padding-right:48px;padding-bottom:3=
+2px" align=3D"right"><img src=3D"https://tb-static.uber.com/prod/receipts/c=
+dn/receipts-v4/eats-bowl.png" height=3D"162" style=3D"height:160px;height:1=
+0rem"></td></tr></tbody></table></td></tr></tbody></table></div><div><table=
+ class=3D"m_-8250285558033874790body-root" align=3D"center" border=3D"0" ce=
+llpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"background=
+:#fff;background-color:#fff;width:100%"><tbody><tr><td class=3D"m_-82502855=
+58033874790body-content" style=3D"width:100%;vertical-align:middle;padding-=
+left:64px;padding-right:64px;padding-bottom:32px;padding-top:32px"><div cla=
+ss=3D"m_-8250285558033874790total-fare-wrapper"><table dir=3D"ltr" class=3D=
+"m_-8250285558033874790total-fare-content" align=3D"center" border=3D"0" ce=
+llpadding=3D"0" cellspacing=3D"0" role=3D"presentation"><tbody><tr><td styl=
+e=3D"width:100%;font-family:UberMoveBold,Arial,sans-serif;font-weight:700;f=
+ont-size:32px;line-height:40px;font-size:2rem;line-height:2.5rem">Total</td=
+><td class=3D"m_-8250285558033874790total-fare-amount" style=3D"font-family=
+:UberMoveBold,Arial,sans-serif;font-weight:700;font-size:32px;line-height:4=
+0px;font-size:2rem;line-height:2.5rem">$48.26</td></tr></tbody></table></di=
+v><div><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"100=
+%" style=3D"border:none;border-collapse:collapse;border-spacing:0;width:100=
+%"><tbody><tr><td style=3D"padding-top:24px;padding-bottom:0"><table border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"100%" align=3D"left" st=
+yle=3D"border:none;border-collapse:collapse;border-spacing:0;table-layout:f=
+ixed;width:100%"><tbody><tr><td valign=3D"top" align=3D"left" style=3D"font=
+-size:1px;line-height:1px;background-color:#f3f3f3">=C2=A0</td></tr></tbody=
+></table></td></tr></tbody></table></div><div><table class=3D"m_-8250285558=
+033874790notification m_-8250285558033874790info" align=3D"center" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"w=
+idth:100%;border:2px solid transparent;border-radius:8px;font-family:UberMo=
+veTextMedium,Arial,sans-serif;margin-bottom:16px"><tbody><tr><td style=3D"w=
+idth:100%;vertical-align:middle;padding-top:16px;padding-right:16px;padding=
+-bottom:16px;padding-left:16px"><table width=3D"100%" border=3D"0" cellpadd=
+ing=3D"0" cellspacing=3D"0" role=3D"presentation"><tbody><tr><td width=3D"4=
+0" height=3D"40"><table align=3D"center" border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" role=3D"presentation"><tbody><tr><td style=3D"padding-right:=
+16px;line-height:0"><img src=3D"https://tb-static.uber.com/prod/receipts/cd=
+n/receipts-v4/notification-info.png" width=3D"40" height=3D"40"></td></tr><=
+/tbody></table></td><td style=3D"padding-right:10px"><table border=3D"0" ce=
+llpadding=3D"0" cellspacing=3D"0" role=3D"presentation"><tbody><tr><td styl=
+e=3D"font-family:UberMoveTextRegular,Arial,sans-serif;font-size:16px;line-h=
+eight:20px;font-size:1rem;line-height:1.5rem;font-weight:400"><div>To view =
+your full receipt go to <a href=3D"https://tracking.ibt.uber.com/tracking/1=
+/click/Bn9WWmfIYU51YgMRLZsmVE0Xoi2FBqrb2BOuLpBVPsap9ACcpRAR4Ku51YckSbDSW32O=
+7XGxQzMW8lxo8MXpAMmNmvVGnckZPT3UaEuAgtgcTNg0jxhXwCgKTS_vpkQBUek4ekKR8pyB-9y=
+39enD6RTIM4iKamIfQDhCGLUF1h_3bzmE0ILwF5Gyn73M4YEFAW0TjcAloZNGMJ7Q__ZW02wF4y=
+I9h1dcDQoLele2CTUdAl0bXWGNE-Kh73N0cwXqoDyppuVbip0Ez45ybCIjyGQbm08uPAAm2YSZk=
+HHG5qiMnjaU-m6WKuNOmOK3cquIQUEdhclzWJSJtB9NuUiVDAYG_Fo204SBA3YsD2B55Hl_QZuS=
+GijdBZQyQTX-0Dy4GJ-nT16XVMbN4-oT4UAuVawD1USztNwYWsgMjd4ZFW09zgyu1sSvJtT3Vs-=
+bYpfmMCjB03YVxy-rl_2EHM7KJItnD5rOlufWdbKgTBcUeNLbDDsy6SVpa5Yn-E4SFgzDhXOMFk=
+tBeAUDO5XfbMD5MDEHvpuIjhMnEJrO9J5oAVutCZQDXeodtiRoHZnUyv3txrEtRP92Bnyu4bjV_=
+zm_HNX77SzAlcMxkk6Qt1VVeWxKTaEGXz9xiyfKC0a6S86M1vYweIeZ9KiSPJ4Lcp2zP74R7IvX=
+LrnLjyMJ-8HDcnyYk6hDebyhA3Zu2QwVoTjBnLcOaQ8vnnyKdNW5TaYjFGbg_mqOvoJ-96Lvh_G=
+c_TNRTfko6_Uqu7kLc3swlasKKB8gXfGIoHtgHBzbzq1TX3WfTUXf86edUcyBmBqQI94=3D" ta=
+rget=3D"_blank">Uber Eats</a>, or <a href=3D"https://tracking.ibt.uber.com/=
+tracking/1/click/GDrXFMfr_7rSP5xE8pMTygRdsnlocNHUJcNtOWiseuDM3fW2lm1F1G6zBW=
+Wud6oHQrjCb9qoxVmZw2aTsIBR7rWBsGhPlHgdfnv1SgisugmvIjOB2if7_NN1p0gpk_ztMKGci=
+pRhpCek1RySuHaDsfouQHgM6QnFjYqbmq33DuF9_3U41wtPs2PVYswQZTB02eKzheQoDb2X3hMR=
+Now2CsIs2cqvdFnb9xeKqaUIf_HVSwfhFU1Ui1HQJFSrFTj1cis_cnyfk8SYrOXlvkgOb1fBUic=
+DiExPrXkOLrgtShrGLXcHh51iqgl9qCkftCsjxyfDWt-1yVBIW_N4B4FzHbIZAKKeSkVgsVcXpM=
+2h1fX2VRORzi8IvCka93A6VZ7o8EOi-S9YdY2jrYcUeQrTbFJcnQrxMiOQdZdgiwlSi1gtXURMj=
+azRDm5SUc2wBTkKFq1CFooeAtdI8B5faHABXdT8HOeu5u4KseEshTwh9owBpMqI2HOlrm-KvgFs=
+8Cv0kyPGv0--xpOSHD55Vg6zinTlLBoqIZ4mNQTPzHi3lFkfy3gwXjgriF3ZmS-ZeVGQRMQwCt8=
+KKdccdHDk-Y9DSumLV3qZGO2AyTD_JObJTsc6ezgSmICPNTMzCaDXVxjY0LSCOlt0Y2xD_ucQ8U=
+3zdNE_IJXhtqTutDE2j3j25qC6DoREdOD5CqPQ760JrIJxc1zl21yQpPgbAO_6CDYGMIWTyxfJp=
+EgIvxGexKkFS2aY2d6au9Joi098D-KtiXpp53OR08oL7rqBNNZOiYcT5Q0G9OWKAOzx2q4iq-vh=
+KlA=3D" target=3D"_blank">download this PDF</a></div></td></tr></tbody></ta=
+ble></td></tr></tbody></table></td></tr></tbody></table></div><div></div><d=
+iv><table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0"=
+ role=3D"presentation" width=3D"100%"><tbody><tr><td style=3D"width:100%;fo=
+nt-family:UberMoveBold,Arial,sans-serif;font-weight:700;font-size:24px;line=
+-height:32px;font-size:1.5rem;line-height:2rem;padding-top:16px;padding-bot=
+tom:8px">Payments</td></tr><tr><td style=3D"width:100%"><div><table align=
+=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presen=
+tation" width=3D"100%"><tbody><tr><td dir=3D"ltr" style=3D"padding:12px 0">=
+<table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" ro=
+le=3D"presentation" width=3D"100%"><tbody><tr><td style=3D"text-align:left"=
+ width=3D"55"><img src=3D"https://tb-static.uber.com/prod/wallet/icons/payp=
+al_3x.png" width=3D"35" height=3D"32" border=3D"0" style=3D"display:inline-=
+block;padding-right:18px;vertical-align:middle;width:32px;height:32px;max-w=
+idth:100%"></td><td><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0"=
+ role=3D"presentation" width=3D"100%"><tbody><tr><td><table border=3D"0" ce=
+llpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%"><tbo=
+dy><tr><td style=3D"text-align:left;font-family:UberMoveTextMedium,Arial,sa=
+ns-serif;font-weight:500;font-size:16px;line-height:20px;font-size:1rem;lin=
+e-height:1.25rem" align=3D"left">PayPal - <a href=3D"mailto:maybejorden@gma=
+il.com" target=3D"_blank">maybejorden@gmail.com</a></td><td style=3D"text-a=
+lign:right;vertical-align:middle" align=3D"right"><font style=3D"font-famil=
+y:UberMoveTextMedium,Arial,sans-serif;font-weight:500;font-size:16px;font-s=
+ize:1rem;text-align:right;direction:ltr;vertical-align:middle;white-space:n=
+owrap">$45.26</font></td></tr></tbody></table></td></tr><tr><td><table bord=
+er=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D=
+"100%"><tbody><tr><td style=3D"text-align:left;font-family:UberMoveTextRegu=
+lar,Arial,sans-serif;font-weight:400;font-size:14px;line-height:20px;font-s=
+ize:.875rem;line-height:1.25rem;color:#4b4b4b" align=3D"left">1/25/26 9:47 =
+p.m.</td><td style=3D"text-align:right;font-family:UberMoveTextRegular,Aria=
+l,sans-serif;font-weight:400;font-size:14px;line-height:20px;font-size:.875=
+rem;line-height:1.25rem;color:#4b4b4b" align=3D"right"></td></tr></tbody></=
+table></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td=
+ dir=3D"ltr" style=3D"padding:12px 0"><table align=3D"center" border=3D"0" =
+cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%"><t=
+body><tr><td style=3D"text-align:left" width=3D"55"><img src=3D"https://tb-=
+static.uber.com/prod/wallet/icons/paypal_3x.png" width=3D"35" height=3D"32"=
+ border=3D"0" style=3D"display:inline-block;padding-right:18px;vertical-ali=
+gn:middle;width:32px;height:32px;max-width:100%"></td><td><table border=3D"=
+0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%"=
+><tbody><tr><td><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" rol=
+e=3D"presentation" width=3D"100%"><tbody><tr><td style=3D"text-align:left;f=
+ont-family:UberMoveTextMedium,Arial,sans-serif;font-weight:500;font-size:16=
+px;line-height:20px;font-size:1rem;line-height:1.25rem" align=3D"left">PayP=
+al - <a href=3D"mailto:maybejorden@gmail.com" target=3D"_blank">maybejorden=
+@gmail.com</a></td><td style=3D"text-align:right;vertical-align:middle" ali=
+gn=3D"right"><font style=3D"font-family:UberMoveTextMedium,Arial,sans-serif=
+;font-weight:500;font-size:16px;font-size:1rem;text-align:right;direction:l=
+tr;vertical-align:middle;white-space:nowrap">$3.00</font></td></tr></tbody>=
+</table></td></tr><tr><td><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" role=3D"presentation" width=3D"100%"><tbody><tr><td style=3D"text-al=
+ign:left;font-family:UberMoveTextRegular,Arial,sans-serif;font-weight:400;f=
+ont-size:14px;line-height:20px;font-size:.875rem;line-height:1.25rem;color:=
+#4b4b4b" align=3D"left">1/25/26 10:47 p.m.</td><td style=3D"text-align:righ=
+t;font-family:UberMoveTextRegular,Arial,sans-serif;font-weight:400;font-siz=
+e:14px;line-height:20px;font-size:.875rem;line-height:1.25rem;color:#4b4b4b=
+" align=3D"right"></td></tr></tbody></table></td></tr></tbody></table></td>=
+</tr></tbody></table></td></tr></tbody></table></div><div><table border=3D"=
+0" cellpadding=3D"0" cellspacing=3D"0" width=3D"100%" style=3D"border:none;=
+border-collapse:collapse;border-spacing:0;width:100%"><tbody><tr><td style=
+=3D"padding-top:0;padding-bottom:16px"><table border=3D"0" cellpadding=3D"0=
+" cellspacing=3D"0" width=3D"100%" align=3D"left" style=3D"border:none;bord=
+er-collapse:collapse;border-spacing:0;table-layout:fixed;width:100%"><tbody=
+><tr><td valign=3D"top" align=3D"left" style=3D"font-size:1px;line-height:1=
+px;background-color:#f3f3f3">=C2=A0</td></tr></tbody></table></td></tr></tb=
+ody></table></div></td></tr></tbody></table></div><div><table dir=3D"ltr" a=
+lign=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pr=
+esentation" width=3D"100%" style=3D"border:none;border-collapse:collapse;bo=
+rder-spacing:0;width:100%"><tbody><tr><td class=3D"m_-8250285558033874790di=
+sclaimer-text" width=3D" 80% " style=3D"width:80%;font-family:UberMoveTextR=
+egular,Arial,sans-serif;font-weight:400;font-size:14px;line-height:20px;fon=
+t-size:.875rem;line-height:1.25rem;color:#4b4b4b;border:none">Want to switc=
+h your payment method?</td><td width=3D" 20% " style=3D"width:20%;backgroun=
+d:#f3f3f3;background-color:#f3f3f3;border-radius:9999px;border-collapse:sep=
+arate;padding:10px" align=3D"center"><a href=3D"https://tracking.ibt.uber.c=
+om/tracking/1/click/6s2n-pfQ77j3exa1AZ_-HOJi1m2IXh8cwhSE9CsoojtmGM8f5olmkev=
+Er-i4reEPyvtd_KlG_ib6TxXO9sdjhG2AVmQ3Sq_zVT2ImytvDw-zAntskF8Z4-2SDNqht6Uoe1=
+IRv7PQU4peDated_HFO_WVUpuJ013-saMCd4T1gceierbARhXuosXzy7aQNoAMIFyv0EhJQQsyi=
+uznqVJ-c1LlAVhaIvN5vmj-OW5AdYDXo1t67P4ryjMXlB9e4zA_GUyW7hrU5KqqAIUySyvU9Udu=
+5aLImPoZRUOlBaNhmf1jQ7ae5BcebDk2TIiCp2EbgSzprZ1wlb5KRV8GoI9owTmBHNTvaGdqHDK=
+reqnNSz3Cz22bS1wtTu3HYZfZc55iw1LA3WzFxKgX85ELF_1mq0FJsR_gfdHZq8aYBeZKK8Kuoq=
+EItaoLYVqYHWvwTxR_0Lu1j6xGSVkD_mVXgO-VG96QWyVKPgVkX8NHBiaWup5blxx0yQMctK73l=
+rJHWDhwE94OTRS12IbPj_BhCOZjeyzb88Lieli4kHPMcUOHpfRAsaJ4Qrk7C6c1-H3dT0GhZBtR=
+tV9e0cWvzSWvaaL_M3yRObEkcHzl_pIMT-7Xl3-UcLWiWu38IvfIfbncVxIbFxst5OryXX0rI49=
+Ys5p6OvUrw4_OZHq8eLawt-mcTxOaMj6GqYAr-YHKs9OYrVf5Laba9fwEJoOy6xmpH4RWNKxMSp=
+YtvfunSLnwlNTyr2pf04siB_mcUPAV-pK6Jh8TC0ilhKFxM2WPPfzptnovs91xUOHbLAwRMV6BD=
+YZHoSUzeBkpt6ul_8yehwgLO6uIukcFdm1mclJmwTsMev2tlhzuirVrbki0klJFY9VKPsHyvs6F=
+mWwnkVMUBHxaeIikbwuHrZvVOmVSaXgAKwZvfirgvyhmNwfkiy3mBv4eiPQfvSFO95h2W9eodQ8=
+9VZqfoHxLSg0NHG1K_H1PdPQHQSxSsLNC0121p-iD3TpFgJElpreDFWgUoy7NfMMUvGwfG0fdSZ=
+95teW1HWN4q6I1jw=3D=3D" style=3D"text-align:center;width:100%;vertical-alig=
+n:middle;text-decoration:none;display:inline-block" target=3D"_blank"><tabl=
+e align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D=
+"presentation" style=3D"margin:0 auto"><tbody><tr><td height=3D"24" width=
+=3D"24"><img src=3D"https://tb-static.uber.com/prod/receipts/cdn/receipts-v=
+4/Switch.png" height=3D"24" width=3D"24" style=3D"border:none;clear:both;di=
+splay:inline-block;height:24px;outline:none;text-decoration:none;width:24px=
+;vertical-align:middle"></td><td style=3D"padding-left:8px;text-align:cente=
+r;font-family:UberMoveTextMedium,Arial,sans-serif;font-weight:500;font-size=
+:14px;line-height:16px;font-size:.875rem;line-height:1rem;color:#000" align=
+=3D"center" valign=3D"middle">Switch</td></tr></tbody></table></a></td></tr=
+></tbody></table><div><table border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" width=3D"100%" style=3D"border:none;border-collapse:collapse;border-spac=
+ing:0;width:100%"><tbody><tr><td style=3D"padding-top:12px;padding-bottom:1=
+2px"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"100%"=
+ align=3D"left" style=3D"border:none;border-collapse:collapse;border-spacin=
+g:0;table-layout:fixed;width:100%"><tbody><tr><td valign=3D"top" align=3D"l=
+eft" style=3D"font-size:1px;line-height:1px;background-color:#f3f3f3">=C2=
+=A0</td></tr></tbody></table></td></tr></tbody></table></div></div><table b=
+order=3D"0" cellpadding=3D"0" cellspacing=3D"0" style=3D"border:none;border=
+-collapse:collapse;border-spacing:0;width:100%;display:table"><tbody><tr><t=
+d style=3D"font-family:ubermovebold,Arial,sans-serif;font-size:1.5rem;font-=
+weight:700;line-height:2rem;padding:20px 0 8px">Order Details</td></tr><tr>=
+<td><table dir=3D"ltr" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" wid=
+th=3D"100%" style=3D"border:none;border-collapse:collapse;border-spacing:0;=
+table-layout:auto;width:100%"><tbody><tr><td width=3D"56" style=3D"text-ali=
+gn:left;padding-right:16px;line-height:0" valign=3D"top"><img src=3D"https:=
+//tb-static.uber.com/prod/receipts/cdn/receipts-v4/eats-bowl.png" width=3D"=
+56" height=3D"56" style=3D"clear:both;vertical-align:middle;display:inline-=
+block;width:56px;height:56px;outline:none;text-decoration:none;display:inli=
+ne-block;padding:0;max-width:100%"></td><td valign=3D"top" height=3D"54px" =
+style=3D"border-bottom:1px solid #f3f3f3;padding-top:12px"><table border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"initial" style=3D"border:n=
+one;border-collapse:collapse;border-spacing:0;table-layout:auto"><tbody><tr=
+><td style=3D"font-family:UberMoveTextMedium,Arial,sans-serif;font-size:1re=
+m;line-height:1.25rem">Uber Delivery</td></tr><tr><td style=3D"color:#5e5e5=
+e;font-size:.875rem;line-height:1.25rem"></td></tr></tbody></table></td></t=
+r><tr><td style=3D"padding-top:16px"></td></tr></tbody></table></td></tr><t=
+r><td><table class=3D"m_-8250285558033874790desktop-content" border=3D"0" c=
+ellpadding=3D"0" cellspacing=3D"0" style=3D"border:none;border-collapse:col=
+lapse;border-spacing:0;width:100%;display:table;padding-bottom:16px"><tbody=
+><tr><td class=3D"m_-8250285558033874790desktop-content" valign=3D"top" sty=
+le=3D"border-right:16px solid transparent;padding-right:16px;width:50%"><ta=
+ble class=3D"m_-8250285558033874790hidden" border=3D"0" cellpadding=3D"0" c=
+ellspacing=3D"0" width=3D"100%" style=3D"border:none;border-collapse:collap=
+se;border-spacing:0;table-layout:auto;width:100%"><tbody><tr><td style=3D"p=
+adding-top:12px"></td></tr><tr><td class=3D"m_-8250285558033874790hidden" v=
+align=3D"top" width=3D"8" height=3D"18" style=3D"width:8px;height:18px;padd=
+ing-left:16px"><img width=3D"8" height=3D"18" src=3D"https://tb-static.uber=
+.com/prod/receipts/cdn/receipts-v4/Pickup-1.png" border=3D"0" style=3D"clea=
+r:both;display:block;max-width:100%;outline:none;text-decoration:none;width=
+:8px;height:18px"></td><td class=3D"m_-8250285558033874790hidden" width=3D"=
+2" style=3D"width:2px;background-color:#000" valign=3D"top"><img class=3D"m=
+_-8250285558033874790hidden" src=3D"https://tb-static.uber.com/prod/receipt=
+s/cdn/receipts-v4/Pickup-2.png" width=3D"2" height=3D"18" border=3D"0" styl=
+e=3D"clear:both;display:block;max-width:100%;outline:none;text-decoration:n=
+one;width:2px;height:18px;background-color:#fff"></td><td class=3D"m_-82502=
+85558033874790hidden" valign=3D"top" width=3D"8" height=3D"18" style=3D"wid=
+th:8px;height:18px"><img src=3D"https://tb-static.uber.com/prod/receipts/cd=
+n/receipts-v4/Pickup-3.png" width=3D"8" height=3D"18" border=3D"0" style=3D=
+"clear:both;display:block;max-width:100%;outline:none;text-decoration:none;=
+width:8px;height:18px"></td><td class=3D"m_-8250285558033874790hidden" vali=
+gn=3D"top" style=3D"padding-bottom:29px;padding-left:24px;text-align:left">=
+<table class=3D"m_-8250285558033874790hidden" border=3D"0" cellpadding=3D"0=
+" cellspacing=3D"0" width=3D"100%" align=3D"left" style=3D"border:none;bord=
+er-collapse:collapse;border-spacing:0;width:100%"><tbody><tr><td valign=3D"=
+top" align=3D"left" style=3D"color:#000;font-size:1rem;line-height:1.25rem"=
+>9:40 p.m. - Pickup</td></tr><tr><td class=3D"m_-8250285558033874790address=
+-point-desc" style=3D"color:#5e5e5e;font-size:.875rem;line-height:1.25rem">=
+6954 Mumford Rd, Halifax, NS B3L 4V9, CA</td></tr></tbody></table></td></tr=
+><tr><td class=3D"m_-8250285558033874790hidden" width=3D"8" height=3D"18" s=
+tyle=3D"width:8px;height:18px;padding-left:16px" valign=3D"top"><img src=3D=
+"https://tb-static.uber.com/prod/receipts/cdn/receipts-v4/Dropoff-1.png" wi=
+dth=3D"8" height=3D"18" border=3D"0" style=3D"clear:both;display:block;heig=
+ht:16px;max-width:100%;outline:none;text-decoration:none;width:8px;height:1=
+8px"></td><td class=3D"m_-8250285558033874790hidden" width=3D"2" style=3D"w=
+idth:2px;background-color:#fff" valign=3D"top"><img class=3D"m_-82502855580=
+33874790hidden" src=3D"https://tb-static.uber.com/prod/receipts/cdn/receipt=
+s-v4/Dropoff-2.png" width=3D"2" height=3D"18" border=3D"0" style=3D"clear:b=
+oth;display:block;height:18px;max-width:100%;outline:none;text-decoration:n=
+one;width:2px"></td><td class=3D"m_-8250285558033874790hidden" width=3D"8" =
+height=3D"18" style=3D"width:8px;height:16px" valign=3D"top"><img src=3D"ht=
+tps://tb-static.uber.com/prod/receipts/cdn/receipts-v4/Dropoff-3.png" borde=
+r=3D"0" width=3D"8" height=3D"18" style=3D"clear:both;display:block;height:=
+16px;max-width:100%;outline:none;text-decoration:none;width:8px;height:18px=
+"></td><td class=3D"m_-8250285558033874790hidden" valign=3D"top" style=3D"p=
+adding-bottom:12px;padding-left:24px;text-align:left"><table class=3D"m_-82=
+50285558033874790hidden" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" w=
+idth=3D"100%" align=3D"left" style=3D"border:none;border-collapse:collapse;=
+border-spacing:0;width:100%"><tbody><tr><td valign=3D"top" align=3D"left" s=
+tyle=3D"color:#000;font-size:1rem;line-height:1.25rem">9:46 p.m. - Delivery=
+</td></tr><tr><td class=3D"m_-8250285558033874790address-point-desc" style=
+=3D"color:#5e5e5e;font-size:.875rem;line-height:1.25rem">6286 Chebucto Rd, =
+Halifax, NS B3L 1K8, CA</td></tr></tbody></table></td></tr><tr><td style=3D=
+"padding-top:0"></td></tr></tbody></table></td><td class=3D"m_-825028555803=
+3874790desktop-content" valign=3D"top" style=3D"width:50%"><img width=3D"31=
+2" height=3D"auto" style=3D"border-radius:12px;clear:both;display:block;hei=
+ght:auto;max-height:358px;max-width:312px;outline:none;text-decoration:none=
+;width:100%" src=3D"https://tb-static.uber.com/prod/image-proc/processed_im=
+ages/4d180a475eabcb8a052f8dca0549a672/560a11f5d26e4cb83686f7810a5f5fe2.jpeg=
+"></td></tr></tbody></table><table class=3D"m_-8250285558033874790mobile-co=
+ntent" border=3D"0" cellpadding=3D"0" cellspacing=3D"16" style=3D"border:no=
+ne;border-collapse:collapse;border-spacing:0;width:100%;display:none;paddin=
+g-top:12px"><tbody><tr><td class=3D"m_-8250285558033874790mobile-content" s=
+tyle=3D"width:100%;display:none"><table class=3D"m_-8250285558033874790hidd=
+en" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"100%" style=
+=3D"border:none;border-collapse:collapse;border-spacing:0;table-layout:auto=
+;width:100%"><tbody><tr><td style=3D"padding-top:12px"></td></tr><tr><td cl=
+ass=3D"m_-8250285558033874790hidden" valign=3D"top" width=3D"8" height=3D"1=
+8" style=3D"width:8px;height:18px;padding-left:16px"><img width=3D"8" heigh=
+t=3D"18" src=3D"https://tb-static.uber.com/prod/receipts/cdn/receipts-v4/Pi=
+ckup-1.png" border=3D"0" style=3D"clear:both;display:block;max-width:100%;o=
+utline:none;text-decoration:none;width:8px;height:18px"></td><td class=3D"m=
+_-8250285558033874790hidden" width=3D"2" style=3D"width:2px;background-colo=
+r:#000" valign=3D"top"><img class=3D"m_-8250285558033874790hidden" src=3D"h=
+ttps://tb-static.uber.com/prod/receipts/cdn/receipts-v4/Pickup-2.png" width=
+=3D"2" height=3D"18" border=3D"0" style=3D"clear:both;display:block;max-wid=
+th:100%;outline:none;text-decoration:none;width:2px;height:18px;background-=
+color:#fff"></td><td class=3D"m_-8250285558033874790hidden" valign=3D"top" =
+width=3D"8" height=3D"18" style=3D"width:8px;height:18px"><img src=3D"https=
+://tb-static.uber.com/prod/receipts/cdn/receipts-v4/Pickup-3.png" width=3D"=
+8" height=3D"18" border=3D"0" style=3D"clear:both;display:block;max-width:1=
+00%;outline:none;text-decoration:none;width:8px;height:18px"></td><td class=
+=3D"m_-8250285558033874790hidden" valign=3D"top" style=3D"padding-bottom:29=
+px;padding-left:24px;text-align:left"><table class=3D"m_-825028555803387479=
+0hidden" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"100%" al=
+ign=3D"left" style=3D"border:none;border-collapse:collapse;border-spacing:0=
+;width:100%"><tbody><tr><td valign=3D"top" align=3D"left" style=3D"color:#0=
+00;font-size:1rem;line-height:1.25rem">9:40 p.m. - Pickup</td></tr><tr><td =
+class=3D"m_-8250285558033874790address-point-desc" style=3D"color:#5e5e5e;f=
+ont-size:.875rem;line-height:1.25rem">6954 Mumford Rd, Halifax, NS B3L 4V9,=
+ CA</td></tr></tbody></table></td></tr><tr><td class=3D"m_-8250285558033874=
+790hidden" width=3D"8" height=3D"18" style=3D"width:8px;height:18px;padding=
+-left:16px" valign=3D"top"><img src=3D"https://tb-static.uber.com/prod/rece=
+ipts/cdn/receipts-v4/Dropoff-1.png" width=3D"8" height=3D"18" border=3D"0" =
+style=3D"clear:both;display:block;height:16px;max-width:100%;outline:none;t=
+ext-decoration:none;width:8px;height:18px"></td><td class=3D"m_-82502855580=
+33874790hidden" width=3D"2" style=3D"width:2px;background-color:#fff" valig=
+n=3D"top"><img class=3D"m_-8250285558033874790hidden" src=3D"https://tb-sta=
+tic.uber.com/prod/receipts/cdn/receipts-v4/Dropoff-2.png" width=3D"2" heigh=
+t=3D"18" border=3D"0" style=3D"clear:both;display:block;height:18px;max-wid=
+th:100%;outline:none;text-decoration:none;width:2px"></td><td class=3D"m_-8=
+250285558033874790hidden" width=3D"8" height=3D"18" style=3D"width:8px;heig=
+ht:16px" valign=3D"top"><img src=3D"https://tb-static.uber.com/prod/receipt=
+s/cdn/receipts-v4/Dropoff-3.png" border=3D"0" width=3D"8" height=3D"18" sty=
+le=3D"clear:both;display:block;height:16px;max-width:100%;outline:none;text=
+-decoration:none;width:8px;height:18px"></td><td class=3D"m_-82502855580338=
+74790hidden" valign=3D"top" style=3D"padding-bottom:12px;padding-left:24px;=
+text-align:left"><table class=3D"m_-8250285558033874790hidden" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" width=3D"100%" align=3D"left" style=3D=
+"border:none;border-collapse:collapse;border-spacing:0;width:100%"><tbody><=
+tr><td valign=3D"top" align=3D"left" style=3D"color:#000;font-size:1rem;lin=
+e-height:1.25rem">9:46 p.m. - Delivery</td></tr><tr><td class=3D"m_-8250285=
+558033874790address-point-desc" style=3D"color:#5e5e5e;font-size:.875rem;li=
+ne-height:1.25rem">6286 Chebucto Rd, Halifax, NS B3L 1K8, CA</td></tr></tbo=
+dy></table></td></tr><tr><td style=3D"padding-top:0"></td></tr></tbody></ta=
+ble></td></tr><tr><td class=3D"m_-8250285558033874790mobile-content" style=
+=3D"width:100%;display:none"><img height=3D"auto" width=3D"100%" border=3D"=
+0" style=3D"clear:both;display:block;height:auto;max-width:100%;outline:non=
+e;text-decoration:none;width:100%;border-radius:12px" src=3D"https://tb-sta=
+tic.uber.com/prod/image-proc/processed_images/4d180a475eabcb8a052f8dca0549a=
+672/560a11f5d26e4cb83686f7810a5f5fe2.jpeg"></td></tr></tbody></table></td><=
+/tr></tbody></table><div style=3D"margin-top:16px"><table dir=3D"ltr" class=
+=3D"m_-8250285558033874790action-panel" align=3D"center" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%" style=
+=3D"border-collapse:separate;border:2px solid #f3f3f3;border-radius:16px;bo=
+rder-collapse:separate"><tbody><tr><td style=3D"width:100%;padding:16px"><t=
+able align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" width=3D"100%"><tbody><tr><td class=3D"m_-825028555803387=
+4790action-panel-title" style=3D"padding-bottom:0;font-family:UberMoveBold,=
+Arial,sans-serif;font-weight:700;font-size:20px;line-height:28px;font-size:=
+1.25rem;line-height:1.75rem">Delivered by SATVIKSINH</td></tr></tbody></tab=
+le></td></tr></tbody></table></div><div><table align=3D"center" border=3D"0=
+" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%">=
+<tbody><tr><td style=3D"width:100%;font-family:UberMoveBold,Arial,sans-seri=
+f;font-weight:700;font-size:24px;line-height:32px;font-size:1.5rem;line-hei=
+ght:2rem;padding-top:16px;padding-bottom:16px"></td></tr><tr><td style=3D"w=
+idth:100%"><div dir=3D"ltr"><table align=3D"center" border=3D"0" cellpaddin=
+g=3D"0" cellspacing=3D"0" role=3D"presentation" width=3D"100%"><tbody><tr><=
+td style=3D"width:40%;font-family:UberMoveTextMedium,Arial,sans-serif;font-=
+weight:500;font-size:16px;line-height:20px;font-size:1rem;line-height:1.25r=
+em;padding-right:16px">Order completed</td><td class=3D"m_-8250285558033874=
+790additional-info-value" style=3D"width:60%;font-family:UberMoveTextMedium=
+,Arial,sans-serif;font-weight:500;font-size:16px;line-height:20px;font-size=
+:1rem;line-height:1.25rem;text-align:right">Jan 25, 2026 at 9:46 p.m.</td><=
+/tr></tbody></table><div><table border=3D"0" cellpadding=3D"0" cellspacing=
+=3D"0" width=3D"100%" style=3D"border:none;border-collapse:collapse;border-=
+spacing:0;width:100%"><tbody><tr><td style=3D"padding-top:16px;padding-bott=
+om:16px"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" width=3D"1=
+00%" align=3D"left" style=3D"border:none;border-collapse:collapse;border-sp=
+acing:0;table-layout:fixed;width:100%"><tbody><tr><td valign=3D"top" align=
+=3D"left" style=3D"font-size:1px;line-height:1px;background-color:#f3f3f3">=
+=C2=A0</td></tr></tbody></table></td></tr></tbody></table></div><table alig=
+n=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"prese=
+ntation" width=3D"100%"><tbody><tr><td style=3D"width:60%;font-family:UberM=
+oveTextMedium,Arial,sans-serif;font-weight:500;font-size:16px;line-height:2=
+0px;font-size:1rem;line-height:1.25rem;padding-right:16px">Want to review y=
+our order history?</td><td class=3D"m_-8250285558033874790additional-info-v=
+alue" style=3D"width:40%;font-family:UberMoveTextMedium,Arial,sans-serif;fo=
+nt-weight:500;font-size:16px;line-height:20px;font-size:1rem;line-height:1.=
+25rem;text-align:right"><a href=3D"https://tracking.ibt.uber.com/tracking/1=
+/click/ft0kt_aVYsoa3NKr680PW-ul448Si19ggPolnKRu79QChVba5inuabUJdYXI8-997RMG=
+qq1VkTXfbu5_bbNVR0mSyaJr0RidXGIccbLLc53vcd2uxptIe0eM1IXl632xyFwtkuo9a1smf9e=
+ZHsQccph82kBZFS29D1hB9BJUN78FSruliXzZVB0Raft6g0OIUeC8UszyqnVK1XbdYy7hSnyaC6=
+TIkthjY-S-i0aSnXs_83KipStuw-uIpoq47yrD_BLhpGqD-B7uWtCIwli0D6bVC8VsW38kNrpjT=
+-P7MEyqLBiWSP7v5YOnm7VV1aXj5Il6_B5bNjNeVugsnL6WnMB2S9skp9s9XkwQF5wh-7_Z-M3v=
+3LV1jnRBtCDMhU-t_0Cy4kbaNob-OF5bNyhXtdfbg5QdO9IuPElpRwfemceP1uNpkM7CGr5nZFl=
+CLzmXKbmIPU1YCCTZJDgyLOs2hPpNBPhGV8_GtabiL5O1grzNPuaJ-1X011sCq9zjPx-G0vzNrh=
+PhvhqTygxRgHYWOVXnC0PzeRZf3uTB_GualM-L9ADcj5GCGx5CZlbl1x_KS2S_k47KjIq4iJRUn=
+hk8zCT7HfHcLtFbR_Wudil392m1ertMeHz_M40P5MO2urqoaIGZObuZ-iK6klX9c_CEnwcWkvJV=
+e3x9BprpEfyLc1-jCIwLzGHNvBj8MZ0bUzoa3ZsQwnhuDAngVKX2kdWoKNTjQ7a30k1VUoAtuwQ=
+XdhmGNNvdZj2QAozH0InW1Pcs4_AIXkzGOMyALyVG7-LSRg=3D=3D" target=3D"_blank">My=
+ orders</a></td></tr></tbody></table><div><table border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" width=3D"100%" style=3D"border:none;border-collaps=
+e:collapse;border-spacing:0;width:100%"><tbody><tr><td style=3D"padding-top=
+:16px;padding-bottom:16px"><table border=3D"0" cellpadding=3D"0" cellspacin=
+g=3D"0" width=3D"100%" align=3D"left" style=3D"border:none;border-collapse:=
+collapse;border-spacing:0;table-layout:fixed;width:100%"><tbody><tr><td val=
+ign=3D"top" align=3D"left" style=3D"font-size:1px;line-height:1px;backgroun=
+d-color:#f3f3f3">=C2=A0</td></tr></tbody></table></td></tr></tbody></table>=
+</div></div></td></tr></tbody></table></div><div style=3D"margin-top:16px">=
+<table dir=3D"ltr" class=3D"m_-8250285558033874790action-panel" align=3D"ce=
+nter" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation=
+" width=3D"100%" style=3D"border-collapse:separate;border:2px solid #f3f3f3=
+;border-radius:16px;border-collapse:separate"><tbody><tr><td style=3D"width=
+:100%;padding:16px"><table align=3D"center" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" role=3D"presentation" width=3D"100%"><tbody><tr><td class=
+=3D"m_-8250285558033874790action-panel-title" style=3D"padding-bottom:16px;=
+font-family:UberMoveBold,Arial,sans-serif;font-weight:700;font-size:20px;li=
+ne-height:28px;font-size:1.25rem;line-height:1.75rem">Need help?</td></tr><=
+tr><td colspan=3D"1" style=3D"padding-bottom:24px;font-family:UberMoveTextR=
+egular,Arial,sans-serif;font-weight:400;font-size:14px;line-height:20px;fon=
+t-size:.875rem;line-height:1.25rem">Our support team is happy to help with =
+any concern you might have.</td></tr><tr><td class=3D"m_-825028555803387479=
+0action-panel-button" colspan=3D"1" style=3D"background:#f3f3f3;background-=
+color:#f3f3f3;border-radius:8px;border-collapse:separate" align=3D"center">=
+<a href=3D"https://tracking.ibt.uber.com/tracking/1/click/ft0kt_aVYsoa3NKr6=
+80PW7VC57s3KIysSNS_VGCzxY-Wcds2YAYdOoAXrPdSroATFe6sp0etwghaIhSAt-pGKvF0Silw=
+f3HJ2UdGntc50zwu0gcccdJXLl8RoTbrkj7z1EphWvetcRQH6rkHb-VvMPS4PpytVaJ3LLo4Vch=
+pEDlgzBq95lV012MFHCeimPRnw5Gd5OYFLYaL9fBY97RiLqNvkrZr9nPz6APSbeGbVAVKg8UYG2=
+MCWULG_sjKybL5SKBQfGOmySJjQBe3T29mDTAnU3_WF0hngO8iaf3DZmEoeBQoqGR5GOOpV9PNA=
+vm_Aph86_GuodVgsuG25pmDZ55INirqrmp3y13OVqw33YKqTGLoVyiHmpA5anDdX2A6GKGzltZT=
+t1vNVHFzhRF-wWEWH0irDOJLgrBtLAWdRqik01Bhcsoyr2i8UjaMks1yEZYVO3nV7u8ikg3y7dm=
+3kE--j_wng8if0yFoJj87OLRNvAggs5EZRD12GCN1Zw3uavV_Ju2Z0G2VLA5ycXcHHPj3mqWGn8=
+iIqiei10PD4bDJ2QO6sHv04-SXpAvavn-UsNaPEm-KHNKeZXLaub573Y7bEgTlZW8GHgijVI19o=
+BIfugUAqjmRDAZEOXp2Rus21IBtaLMFcYcRWq9FbpOn65lfjJf9Dv14Wc7MBLOfr6BtuLotB-KA=
+Tel-hQy1pFLPjjS9rj37rqHxEbYJ7YXPxsEDAnuVTkkG76ZWznpy_w94EorDz12YPMIrId6JZ1N=
+2" style=3D"text-align:center;width:100%;vertical-align:middle;text-decorat=
+ion:none;display:inline-block" target=3D"_blank"><table align=3D"center" bo=
+rder=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=
+=3D"margin:0 auto"><tbody><tr><td width=3D"20" style=3D"padding-left:8px"><=
+img src=3D"https://tb-static.uber.com/prod/receipts/cdn/receipts-v4/icon_su=
+pport_email.png" height=3D"20" width=3D"20" style=3D"border:none;clear:both=
+;display:inline-block;height:20px;max-width:100%;outline:none;text-decorati=
+on:none;width:20px;vertical-align:middle"></td><td style=3D"padding-left:8p=
+x;padding-bottom:10px;padding-top:10px;text-align:center;font-family:UberMo=
+veTextMedium,Arial,sans-serif;font-weight:500;font-size:14px;line-height:16=
+px;font-size:.875rem;line-height:1rem" align=3D"center" valign=3D"middle">C=
+ontact support</td></tr></tbody></table></a></td></tr></tbody></table></td>=
+</tr></tbody></table></div><table width=3D"100%" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" style=3D"border-spacing:0;border-collapse:collapse=
+;width:100%;border:none"><tbody><tr><td style=3D"line-height:1px;font-size:=
+1px;color:#fff;display:none">xidb9f4dff2-c881-502a-82e8-79eff4552f18</td></=
+tr><tr><td style=3D"line-height:1px;font-size:1px;color:#fff;display:none">=
+pGvlI2ANUbXFfyEOgxta1RMV082993</td></tr></tbody></table></td></tr></tbody><=
+/table></div><div class=3D"m_-8250285558033874790footer" style=3D"backgroun=
+d:#000;background-color:#000"><table align=3D"center" border=3D"0" cellpadd=
+ing=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"background:#000;=
+background-color:#000;width:100%"><tbody><tr><td dir=3D"ltr" class=3D"m_-82=
+50285558033874790footer-table-cell"><table class=3D"m_-8250285558033874790m=
+obile-table" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D=
+"0" role=3D"presentation" style=3D"width:100%;display:none"><tbody><tr><td =
+class=3D"m_-8250285558033874790mobile-content" valign=3D"top" align=3D"left=
+" style=3D"display:none;white-space:nowrap;text-align:left;padding-top:32px=
+;padding-bottom:16px"><a style=3D"color:#fff;text-decoration:none" href=3D"=
+https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVEOM521J=
+k1rAdhxDEaPKy6YvJY8MdjNAgaVKKPnXAAfZwcK4tIELB_YWCIa7JWWooL__NSLux19O5wQCyVm=
+2s3OPqy6Bh1Cqb1KD9pt1zERQY5-vO7Vrw7r0L1-Md85HTRi0ajU8_Qja5WkvqcAZ_j9mvoAkTj=
+SA-vE3VauJcxcNr3PphoBGOcGe0fkGdSM4Rr7aiI2nGhCYLeILW1vdZqXITdmhmYG2U8urFZueR=
+NhyB0vHTYu5er2DFp37XZ7lvyL2h1KX6pbgxthnjhhrsMjMdbeRRF9Ocq8imWN_x6fvOguYT7bn=
+kBi-acfPN5KaCQRskqXPYzJKwjYp6EYLm7u_HptOW1eqe8BVP9tj5OxwPc1SYFbNewzMYPuAZsc=
+94noaUHNpLZ10Tm7RkT35e9YeDeqrc-IG9u_0ZNDyyUNZDGVCRtAFYXdpM9i05ZAtfUxcQPlDvk=
+HBVbNbPy65GRh8qJTS-KnmqIBhuidBkB7KsB-_gRsZI0QybXY-yhJRViEl8uP76cAKXTtA2z8v-=
+P-QxMu9rUxFVmj3v2X1TPbUGc9JkpTTIs5UrGmbSJ-EYKsH4b38xO5UjuuPdHWlF2Q7iB2bgx-l=
+eet960EMrx3VatdxPr6W0OwccVha9H2wWnVgs8Ii9hErv7WtHr1CT5T8pnNSjKiweDGe57JzJ1u=
+E79BdzZ-jEEBU9dfheWGaFBqp-gBl1_e_snOfgteNfFaI_1XQMt-cQtu0FV5yd-Tu" target=
+=3D"_blank">My Account</a></td></tr><tr><td class=3D"m_-8250285558033874790=
+mobile-content" style=3D"display:none;font-size:1px;line-height:1px;backgro=
+und-color:#292929">=C2=A0</td></tr><tr><td class=3D"m_-8250285558033874790m=
+obile-content" valign=3D"top" align=3D"left" style=3D"display:none;white-sp=
+ace:nowrap;text-align:left;padding-top:16px;padding-bottom:16px"><a style=
+=3D"color:#fff;text-decoration:none" href=3D"https://tracking.ibt.uber.com/=
+tracking/1/click/Bn9WWmfIYU51YgMRLZsmVAc-51qJPdLuuUvOgqOXtafByoBzO1vCu3xn7p=
+mDMz2py9yy1sW9fvuV4Wey6zhCCTMQY-llNiUpKNqJ-WQQ2osi7a3bhRRVsaOolSkCklUnDERvg=
+hUn1LXtfonWi06-PFGzYe5hu5kPYHigJKYrnGNskYvxnhp0vlprBXIcZn82j8NcvkdvNxOEsikm=
+ZdbaVRrQfptSJQmjJVmv5wA2yRhoIuw82sw7J8U1-eDiF9fO6JuqP54PnVVSE8WDX66F_GvDjfS=
+Yq-IKhmdO0HsyejaBGnziVac-ASC_utGgx_wDBiDkPL1DuRomoamzqTFOebZVOiqijYJ-_Hz0aW=
+pvFVwiKlaXeLInx0ySf0IyKhAMA331Vu2czc_hsrgbteVVyWMxCbLCt1hGCICxCZjkvDuNXnDXL=
+NWU-5tDMCc6xmT5pMaTDa4QKI2730zZSIDvqBwzQGqtrwPmNIIkG5wqOoqqudSdjQPVJK3ph9zV=
+jNVvd_d2CcgruDfGj2LYOq_Mx67NFKWA9eBckKsmAQrYAi1Uj6cEb5rUbufQIQt3zmfwH71RHHL=
+tn9-vZKXdLjy1jvmJxP7TccZZ-Eol5Cjx08XDUNiKI9QfvlJ-QCzssMSCFkOHkIGhse911r4skz=
+W7Ovf_ZywLr1xtXbliaifesN6djUivWAYgb8lgDQuljHA5Ko_hcmI7dCxf40zRhqUVHDVcvJj7A=
+DylxPbW6XRxbAaRW_vTSUrnVsECHDLPQVZD0llXd9nuunBZOAzjsMpepA=3D=3D" target=3D"=
+_blank">Privacy policy</a></td></tr><tr><td class=3D"m_-8250285558033874790=
+mobile-content" style=3D"display:none;font-size:1px;line-height:1px;backgro=
+und-color:#292929">=C2=A0</td></tr><tr><td class=3D"m_-8250285558033874790m=
+obile-content" valign=3D"top" align=3D"left" style=3D"display:none;white-sp=
+ace:nowrap;text-align:left;padding-top:16px;padding-bottom:16px"><a style=
+=3D"color:#fff;text-decoration:none" href=3D"https://tracking.ibt.uber.com/=
+tracking/1/click/lenjdmk3B7LiIv2b3Aj17gLToqwBzK6k4kTkThN-kYxCe2dEONsmN9IuY_=
+RXALo6YGwnsg4km90ui-1qKhVxiw8Fie34q_oXVlhIKDp5R56ls9UArGtWEC86YRq_WuQBVv-v8=
+88WG3K3hatc7FswMXoFEs7_NnvvnIsJ-d42glEmwhYo7mL-P4aEr6Ap1kthjCgX0Lxbt7xOi78i=
+qduHKz9tQHG5-M7-DCjnhgdh7NKCZ9m4vwNS4QBAJxlM9zUXBX5vIM578M7geAxUmuPIgkvbeQa=
+Ub6W2fWxRI6KS3_S85LTKtw-N7nRWW342Bb64Kk9mOuET8YrmSslmxYuRZgmUTDTBKxU3w9_w1g=
+l9dOheNYcpxpIxpJ-dpjZ45G-AXu8le8fr6w5x8z99-KJAJdui0bAMNPsCYSd_8XUqD3JWh6ctN=
+dKrbD8ZGJGKLQTwDh5gTaQgnRu9v694X2PJPA36vZeiihrGRLA6K2g3yk0kT19CzRrQQs6OYvU1=
+bMNQ1WhuhQUiUEG8zjZsqGEMMK8nIyhnheiMfNR0BjJmzWr7sR1XunkxBGyY42seCDbT_0FjmpI=
+WQpf3u4tzbl864wwbf8qKZG3JHDfWUsKn228V6lwK6bP282kCOpxSV2Bc5rlQ9duf-2XjbEaroz=
+rCfSF4FBQaPEBUWxNOF9p14oGxupFSdwWg2fgAjLpDSWKR8eht0zR0KEbVrklQ4Iecd9aGy5p70=
+PHTienbB89KjtmIy33s6wJu0Lsrx5j6PLC7" target=3D"_blank">Terms and Conditions=
+</a></td></tr><tr><td class=3D"m_-8250285558033874790mobile-content" style=
+=3D"display:none;font-size:1px;line-height:1px;background-color:#292929">=
+=C2=A0</td></tr><tr><td class=3D"m_-8250285558033874790mobile-content" vali=
+gn=3D"top" align=3D"left" style=3D"display:none;white-space:nowrap;text-ali=
+gn:left;padding-top:16px;padding-bottom:16px"><table class=3D"m_-8250285558=
+033874790mobile-table" align=3D"left" border=3D"0" cellpadding=3D"0" cellsp=
+acing=3D"0" role=3D"presentation" style=3D"display:none"><tbody><tr><td sty=
+le=3D"padding-right:8px"><a href=3D"https://tracking.ibt.uber.com/tracking/=
+1/click/Bn9WWmfIYU51YgMRLZsmVGplnYFB_YOYoIy-2y3jEwPzhdsdawyL6D3kZb28jh1iUD2=
+CU6JSpDvHyqBvQobvfjDjtAey811_KCnxYMdMPPkpXuJDXCx3Nmo1_13cm8ktA6467XgNBN_x48=
+UfCtAE0kjqUcggXxGLg3xXPlt5xD8HaIqmMptvGsIdEhcHfFhS8DVa2kd7LBrJ26D3i9q21ic1h=
+pfmrRAD0Zq4a6MFeByZzwNjD68n-pMv5IfjWJUufcZP_d4FrnFs0XV0ApofDy5PpC8eeNXUNmjT=
+ebNUtsbvQprwUK8xc5VAb2kZq9W0wD2QB0Y2iRvqPOuHLvpX4szqKh2ray9VECNLjzMrnrakpkn=
+mEpicf0sOzD7MtE4xQzoptK76xxiL5i9WFhK2O7NqAQZiE_yzrRuRyzAxdvzPwfPJck7A3Tsf8j=
+ROZv5dBymvWO88HkECUjNTsg0Iq2jN9FsUTSJ6ODm6LU9rJ1JDSNspVQoe9ELbJNwrd1vf96OGh=
+eJcLY_GD0BViFaCWPJL85B_CLtgyCpmj6VvvTuuBtTt3AfAw8tOUNGqqOuWihZxX_E3XyjYqbut=
+juSishabXuSoeMbLrd12lrKLOPFQdReVvjQDwk9yrL_AQsTCdW4qNmdYsiiI-70GRs4ZuhyGnba=
+VBHnyfhjGaxxGU6u7-NoqG8goCFbdPkZvTqQhuODFVdaHUOJYvsNC9Mt64b9Vx7V91YNM_076OS=
+xG2zW77VDLB8oYteT_yQg_xe7C" target=3D"_blank"><img src=3D"https://tb-static=
+.uber.com/prod/receipts/cdn/receipts-v4/icon_social_facebook.png" width=3D"=
+30" height=3D"30" border=3D"0" style=3D"border:none;clear:both;display:inli=
+ne-block;height:30px;max-width:100%;outline:none;text-decoration:none;width=
+:30px"></a></td><td style=3D"padding-right:8px"><a href=3D"https://tracking=
+.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGplnYFB_YOYoIy-2y3jEwPS=
+7XkSZPIQQqozN6RgJ81PYnnqcaa7Hv9ITpD_P9KLjfjFDvbtDVJuIomzlS9RlUGAiQvJA7LMkg6=
+K9jtzzjD0px87-mHt9HbbBBItPuF3LaJc_fPgWIw2Als_AtXJxCWo5j8pKZ8eynS6wgAiyl0nNm=
+H8nZqwZjlXByAV4QcOYyMAS3y-aOP11G9WiX-2MG__ARZVMfRT5nOkfEUYpQhoUT9pKxqt6Iznd=
+PC9tA_iXQbEux070VToGIJCFuz1V_JxeI7ghpDZQH8FUvAsY8Xzt8YGZWPHww8HR41-r0uzUCyo=
+zQOnFK2ImQDw_TC2ApPwIN8WpWHhNdyofKR-v7mspsDCESZa9iJIZY48yIb6xjWZPab7DlSscmQ=
+Pt9YpUGNdnZu5JV29sRu3t1JPFSIGdO_NbID5Hf8gh_YDk4DVyxyNW5z56QSgQFErk52kVZX7i4=
+1tgyPfAexAUnwdgFlOkr0qDHEbXs2zpNO7-d_cUUgO-f9vDSRXszabVN1BEWqESmBGvgtVDI04a=
+_wJJM_LoYlweWQFnzjz5XmEwm_CO1CBTGGtu_FJfcFf888Altf9bhhmuNnhUKiSnGVKKRvOZ2L7=
+6XJK7yXacsh1OT3k2mq_pRiR8VdH5r5VsoLMcj_NsrLlpRmjTaT8jow0LEOUBZ5o0v2xueUJNsk=
+lidkQDrKOznNDp_PC3lWARyBFfDdqFxIHu_eCth0buPBBA4fMycDh2tLCVLyR6ajtEBtFjg=3D=
+=3D" target=3D"_blank"><img src=3D"https://tb-static.uber.com/prod/receipts=
+/cdn/receipts-v4/icon_social_instagram.png" width=3D"30" height=3D"30" bord=
+er=3D"0" style=3D"border:none;clear:both;display:inline-block;height:30px;m=
+ax-width:100%;outline:none;text-decoration:none;width:30px"></a></td><td st=
+yle=3D"padding-right:8px"><a href=3D"https://tracking.ibt.uber.com/tracking=
+/1/click/Bn9WWmfIYU51YgMRLZsmVGDB61wCoykUX4b1e-UihxIONlybxhMXVPOdNFEp3Gresf=
+9kinjb_kpzHcdLZUJHbTdohkNhV_J3JnB01h47CbDm0cSFncwhR4uwoYzTXncnFlLCYbHJKIOiQ=
+_X7Oy8Y61pRQfeMlo8fyW5J6eLLnY59QUIc3yaDbpk4JyiOl2NKeZ1Awkk18azj-V89nk5X7iLO=
+2P2GOy-JWKYgPqwp1rIHEXDSuSbOJgzG7XJzxGUHmMkrsvrZ2ukpgRrtiWDUkUXQiNINXs9ZGlo=
+_O2-e4jYhvB9pAKZQUbv3E97sdkmK-CPu7VfywBE5oe8OIU6SqFYOSCY62bCcPQva_WT0XvE6LV=
+OtWpJorUFboF_yg0vXx8SnmyO779-146OGaTh9jmPqee2YpWB63K6jaulX79XL-ufvJin5v82xs=
+zMfXuLahNskie3N8CiTJhycbvlSODjQLB1s03tr6uJD7i-Fjw6nZn4BI1y3I8t_bmkv2oNMb6ku=
+6uex-1sOKGkpTX1Qq6rHg-60k4uhwUtz7Ndqc39zzKj-84cMmjpswGMDP_LDCxEv7mfWIELBk0g=
+GqIXZf6-T6waGRUHAP-3DTwFujmS6M0hWGBDt1EfHQwCtkggj4SNLQPg-yX57_FIRsDu59KVwst=
+SN91qrrH9eHmG1bZJfQ2EgdedbrCHl2aDwlTGpIyaG4OocJn3Gkz8xQFSxowOe3XHK_OoB3DhTU=
+Zf_Q1MZASP4JsXvHMOJovmZBv134r-1ftjIchbBn64MXpTqiA=3D=3D" target=3D"_blank">=
+<img src=3D"https://tb-static.uber.com/prod/receipts/cdn/receipts-v4/icon_s=
+ocial_youtube.png" width=3D"30" height=3D"30" border=3D"0" style=3D"border:=
+none;clear:both;display:inline-block;height:30px;max-width:100%;outline:non=
+e;text-decoration:none;width:30px"></a></td></tr></tbody></table></td></tr>=
+</tbody></table></td></tr><tr><td dir=3D"ltr" class=3D"m_-82502855580338747=
+90footer-table-cell" style=3D"padding-left:64px;padding-right:64px;padding-=
+bottom:32px;padding-top:32px"><table align=3D"center" border=3D"0" cellpadd=
+ing=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"width:100%"><tbo=
+dy><tr><td valign=3D"top" align=3D"left" style=3D"white-space:nowrap;text-a=
+lign:left"><span class=3D"m_-8250285558033874790entity-info" style=3D"font-=
+family:UberMoveTextRegular,Arial,sans-serif;font-weight:400;font-size:14px;=
+line-height:20px;font-size:.875rem;line-height:1.25rem;width:200px;white-sp=
+ace:initial;display:inline-block;color:#a6a6a6">Uber Portier Canada Inc.<br=
+>66 Wellington Street West<br>Suite 5300, TD Bank Tower<br>Toronto ON M5K 1=
+E6</span></td><td valign=3D"top" align=3D"right" style=3D"text-align:right;=
+white-space:nowrap"><table align=3D"center" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" role=3D"presentation" style=3D"width:100%"><tbody><tr><td=
+ class=3D"m_-8250285558033874790desktop-content" valign=3D"top" align=3D"le=
+ft" style=3D"white-space:nowrap;text-align:right"><a href=3D"https://tracki=
+ng.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVEOM521Jk1rAdhxDEaPKy6=
+YvJY8MdjNAgaVKKPnXAAfZwcK4tIELB_YWCIa7JWWooL__NSLux19O5wQCyVm2s3OPqy6Bh1Cqb=
+1KD9pt1zERQY5-vO7Vrw7r0L1-Md85HTRi0ajU8_Qja5WkvqcAZ_j9mvoAkTjSA-vE3VauJcxcN=
+r3PphoBGOcGe0fkGdSM4Rr7aiI2nGhCYLeILW1vdZqXITdmhmYG2U8urFZueRNhyB0vHTYu5er2=
+DFp37XZ7lvyL2h1KX6pbgxthnjhhrsMjMdbeRRF9Ocq8imWN_x6fvOguYT7bnkBi-acfPN5KaCQ=
+RskqXPYzJKwjYp6EYLm7u_HptOW1eqe8BVP9tj5OxwPc1SYFbNewzMYPuAZsc94noaUHNpLZ10T=
+m7RkT35e9YeDeqrc-IG9u_0ZNDyyUNZDGVCRtAFYXdpM9i05ZAtfUxcQPlDvkHBVbNbPy65GRh8=
+qJTS-KnmqIBhuidBkB7KsB-_gRsZI0QybXY-yhJRViEl8uP76cAKXTtA2z8v-P-QxMu9rUxFVmj=
+3v2X1TPbUGc9JkpTTIs5UrGmbSJ-EYKsH4b38xO5UjuuPdHWlF2Q7iB2bgx-leet960EMrx3Vat=
+dxPr6W0OwccVha9H2wWnVgs8Ii9hErv7WtHr1CT5T8pnNSjKiweDGe57JzJ1uE79BdzZ-jEEBU9=
+dfheWGaFBqp-gBl1_e_snOfgteNfFaI_1XQMt-cQtu0FV5yd-Tu" style=3D"color:#fff;te=
+xt-decoration:underline" target=3D"_blank">My Account</a></td></tr><tr><td =
+class=3D"m_-8250285558033874790desktop-content" valign=3D"top" align=3D"lef=
+t" style=3D"white-space:nowrap;text-align:right;padding-top:16px"><a href=
+=3D"https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVAc-=
+51qJPdLuuUvOgqOXtafByoBzO1vCu3xn7pmDMz2py9yy1sW9fvuV4Wey6zhCCTMQY-llNiUpKNq=
+J-WQQ2osi7a3bhRRVsaOolSkCklUnDERvghUn1LXtfonWi06-PFGzYe5hu5kPYHigJKYrnGNskY=
+vxnhp0vlprBXIcZn82j8NcvkdvNxOEsikmZdbaVRrQfptSJQmjJVmv5wA2yRhoIuw82sw7J8U1-=
+eDiF9fO6JuqP54PnVVSE8WDX66F_GvDjfSYq-IKhmdO0HsyejaBGnziVac-ASC_utGgx_wDBiDk=
+PL1DuRomoamzqTFOebZVOiqijYJ-_Hz0aWpvFVwiKlaXeLInx0ySf0IyKhAMA331Vu2czc_hsrg=
+bteVVyWMxCbLCt1hGCICxCZjkvDuNXnDXLNWU-5tDMCc6xmT5pMaTDa4QKI2730zZSIDvqBwzQG=
+qtrwPmNIIkG5wqOoqqudSdjQPVJK3ph9zVjNVvd_d2CcgruDfGj2LYOq_Mx67NFKWA9eBckKsmA=
+QrYAi1Uj6cEb5rUbufQIQt3zmfwH71RHHLtn9-vZKXdLjy1jvmJxP7TccZZ-Eol5Cjx08XDUNiK=
+I9QfvlJ-QCzssMSCFkOHkIGhse911r4skzW7Ovf_ZywLr1xtXbliaifesN6djUivWAYgb8lgDQu=
+ljHA5Ko_hcmI7dCxf40zRhqUVHDVcvJj7ADylxPbW6XRxbAaRW_vTSUrnVsECHDLPQVZD0llXd9=
+nuunBZOAzjsMpepA=3D=3D" style=3D"color:#fff;text-decoration:underline" targ=
+et=3D"_blank">Privacy policy</a></td></tr><tr><td class=3D"m_-8250285558033=
+874790desktop-content" valign=3D"top" align=3D"left" style=3D"white-space:n=
+owrap;text-align:right;padding-top:16px"><a href=3D"https://tracking.ibt.ub=
+er.com/tracking/1/click/lenjdmk3B7LiIv2b3Aj17gLToqwBzK6k4kTkThN-kYxCe2dEONs=
+mN9IuY_RXALo6YGwnsg4km90ui-1qKhVxiw8Fie34q_oXVlhIKDp5R56ls9UArGtWEC86YRq_Wu=
+QBVv-v888WG3K3hatc7FswMXoFEs7_NnvvnIsJ-d42glEmwhYo7mL-P4aEr6Ap1kthjCgX0Lxbt=
+7xOi78iqduHKz9tQHG5-M7-DCjnhgdh7NKCZ9m4vwNS4QBAJxlM9zUXBX5vIM578M7geAxUmuPI=
+gkvbeQaUb6W2fWxRI6KS3_S85LTKtw-N7nRWW342Bb64Kk9mOuET8YrmSslmxYuRZgmUTDTBKxU=
+3w9_w1gl9dOheNYcpxpIxpJ-dpjZ45G-AXu8le8fr6w5x8z99-KJAJdui0bAMNPsCYSd_8XUqD3=
+JWh6ctNdKrbD8ZGJGKLQTwDh5gTaQgnRu9v694X2PJPA36vZeiihrGRLA6K2g3yk0kT19CzRrQQ=
+s6OYvU1bMNQ1WhuhQUiUEG8zjZsqGEMMK8nIyhnheiMfNR0BjJmzWr7sR1XunkxBGyY42seCDbT=
+_0FjmpIWQpf3u4tzbl864wwbf8qKZG3JHDfWUsKn228V6lwK6bP282kCOpxSV2Bc5rlQ9duf-2X=
+jbEarozrCfSF4FBQaPEBUWxNOF9p14oGxupFSdwWg2fgAjLpDSWKR8eht0zR0KEbVrklQ4Iecd9=
+aGy5p70PHTienbB89KjtmIy33s6wJu0Lsrx5j6PLC7" style=3D"color:#fff;text-decora=
+tion:underline" target=3D"_blank">Terms and Conditions</a></td></tr></tbody=
+></table></td></tr><tr><td valign=3D"top" align=3D"left" style=3D"text-alig=
+n:left;white-space:nowrap;padding-top:16px"><img src=3D"https://tb-static.u=
+ber.com/prod/receipts/cdn/receipts-v4/uber_footer_icon.png" width=3D"74" he=
+ight=3D"44"></td><td valign=3D"bottom" align=3D"right" style=3D"text-align:=
+right;white-space:nowrap"><table align=3D"right" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation"><tbody><tr><td class=3D"m_-8=
+250285558033874790desktop-content" valign=3D"bottom" style=3D"padding-left:=
+8px"><a href=3D"https://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51=
+YgMRLZsmVGplnYFB_YOYoIy-2y3jEwPzhdsdawyL6D3kZb28jh1iUD2CU6JSpDvHyqBvQobvfjD=
+jtAey811_KCnxYMdMPPkpXuJDXCx3Nmo1_13cm8ktA6467XgNBN_x48UfCtAE0kjqUcggXxGLg3=
+xXPlt5xD8HaIqmMptvGsIdEhcHfFhS8DVa2kd7LBrJ26D3i9q21ic1hpfmrRAD0Zq4a6MFeByZz=
+wNjD68n-pMv5IfjWJUufcZP_d4FrnFs0XV0ApofDy5PpC8eeNXUNmjTebNUtsbvQprwUK8xc5VA=
+b2kZq9W0wD2QB0Y2iRvqPOuHLvpX4szqKh2ray9VECNLjzMrnrakpknmEpicf0sOzD7MtE4xQzo=
+ptK76xxiL5i9WFhK2O7NqAQZiE_yzrRuRyzAxdvzPwfPJck7A3Tsf8jROZv5dBymvWO88HkECUj=
+NTsg0Iq2jN9FsUTSJ6ODm6LU9rJ1JDSNspVQoe9ELbJNwrd1vf96OGheJcLY_GD0BViFaCWPJL8=
+5B_CLtgyCpmj6VvvTuuBtTt3AfAw8tOUNGqqOuWihZxX_E3XyjYqbutjuSishabXuSoeMbLrd12=
+lrKLOPFQdReVvjQDwk9yrL_AQsTCdW4qNmdYsiiI-70GRs4ZuhyGnbaVBHnyfhjGaxxGU6u7-No=
+qG8goCFbdPkZvTqQhuODFVdaHUOJYvsNC9Mt64b9Vx7V91YNM_076OSxG2zW77VDLB8oYteT_yQ=
+g_xe7C" target=3D"_blank"><img src=3D"https://tb-static.uber.com/prod/recei=
+pts/cdn/receipts-v4/icon_social_facebook.png" width=3D"30" height=3D"30" bo=
+rder=3D"0" style=3D"border:none;clear:both;display:inline-block;height:30px=
+;max-width:100%;outline:none;text-decoration:none;width:30px"></a></td><td =
+class=3D"m_-8250285558033874790desktop-content" valign=3D"bottom" style=3D"=
+padding-left:8px"><a href=3D"https://tracking.ibt.uber.com/tracking/1/click=
+/Bn9WWmfIYU51YgMRLZsmVGplnYFB_YOYoIy-2y3jEwPS7XkSZPIQQqozN6RgJ81PYnnqcaa7Hv=
+9ITpD_P9KLjfjFDvbtDVJuIomzlS9RlUGAiQvJA7LMkg6K9jtzzjD0px87-mHt9HbbBBItPuF3L=
+aJc_fPgWIw2Als_AtXJxCWo5j8pKZ8eynS6wgAiyl0nNmH8nZqwZjlXByAV4QcOYyMAS3y-aOP1=
+1G9WiX-2MG__ARZVMfRT5nOkfEUYpQhoUT9pKxqt6IzndPC9tA_iXQbEux070VToGIJCFuz1V_J=
+xeI7ghpDZQH8FUvAsY8Xzt8YGZWPHww8HR41-r0uzUCyozQOnFK2ImQDw_TC2ApPwIN8WpWHhNd=
+yofKR-v7mspsDCESZa9iJIZY48yIb6xjWZPab7DlSscmQPt9YpUGNdnZu5JV29sRu3t1JPFSIGd=
+O_NbID5Hf8gh_YDk4DVyxyNW5z56QSgQFErk52kVZX7i41tgyPfAexAUnwdgFlOkr0qDHEbXs2z=
+pNO7-d_cUUgO-f9vDSRXszabVN1BEWqESmBGvgtVDI04a_wJJM_LoYlweWQFnzjz5XmEwm_CO1C=
+BTGGtu_FJfcFf888Altf9bhhmuNnhUKiSnGVKKRvOZ2L76XJK7yXacsh1OT3k2mq_pRiR8VdH5r=
+5VsoLMcj_NsrLlpRmjTaT8jow0LEOUBZ5o0v2xueUJNsklidkQDrKOznNDp_PC3lWARyBFfDdqF=
+xIHu_eCth0buPBBA4fMycDh2tLCVLyR6ajtEBtFjg=3D=3D" target=3D"_blank"><img src=
+=3D"https://tb-static.uber.com/prod/receipts/cdn/receipts-v4/icon_social_in=
+stagram.png" width=3D"30" height=3D"30" border=3D"0" style=3D"border:none;c=
+lear:both;display:inline-block;height:30px;max-width:100%;outline:none;text=
+-decoration:none;width:30px"></a></td><td class=3D"m_-8250285558033874790de=
+sktop-content" valign=3D"bottom" style=3D"padding-left:8px"><a href=3D"http=
+s://tracking.ibt.uber.com/tracking/1/click/Bn9WWmfIYU51YgMRLZsmVGDB61wCoykU=
+X4b1e-UihxIONlybxhMXVPOdNFEp3Gresf9kinjb_kpzHcdLZUJHbTdohkNhV_J3JnB01h47CbD=
+m0cSFncwhR4uwoYzTXncnFlLCYbHJKIOiQ_X7Oy8Y61pRQfeMlo8fyW5J6eLLnY59QUIc3yaDbp=
+k4JyiOl2NKeZ1Awkk18azj-V89nk5X7iLO2P2GOy-JWKYgPqwp1rIHEXDSuSbOJgzG7XJzxGUHm=
+MkrsvrZ2ukpgRrtiWDUkUXQiNINXs9ZGlo_O2-e4jYhvB9pAKZQUbv3E97sdkmK-CPu7VfywBE5=
+oe8OIU6SqFYOSCY62bCcPQva_WT0XvE6LVOtWpJorUFboF_yg0vXx8SnmyO779-146OGaTh9jmP=
+qee2YpWB63K6jaulX79XL-ufvJin5v82xszMfXuLahNskie3N8CiTJhycbvlSODjQLB1s03tr6u=
+JD7i-Fjw6nZn4BI1y3I8t_bmkv2oNMb6ku6uex-1sOKGkpTX1Qq6rHg-60k4uhwUtz7Ndqc39zz=
+Kj-84cMmjpswGMDP_LDCxEv7mfWIELBk0gGqIXZf6-T6waGRUHAP-3DTwFujmS6M0hWGBDt1EfH=
+QwCtkggj4SNLQPg-yX57_FIRsDu59KVwstSN91qrrH9eHmG1bZJfQ2EgdedbrCHl2aDwlTGpIya=
+G4OocJn3Gkz8xQFSxowOe3XHK_OoB3DhTUZf_Q1MZASP4JsXvHMOJovmZBv134r-1ftjIchbBn6=
+4MXpTqiA=3D=3D" target=3D"_blank"><img src=3D"https://tb-static.uber.com/pr=
+od/receipts/cdn/receipts-v4/icon_social_youtube.png" width=3D"30" height=3D=
+"30" border=3D"0" style=3D"border:none;clear:both;display:inline-block;heig=
+ht:30px;max-width:100%;outline:none;text-decoration:none;width:30px"></a></=
+td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table=
+></div></div></td></tr></tbody></table></td><td></td></tr></tbody></table><=
+/div></div></div></div>
+
+--000000000000d6fa09064a2d99dd--

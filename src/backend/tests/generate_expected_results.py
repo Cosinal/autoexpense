@@ -19,6 +19,7 @@ import os
 import json
 import argparse
 import mimetypes
+import email
 from pathlib import Path
 from decimal import Decimal
 from typing import Dict, Any, List
@@ -45,29 +46,51 @@ def generate_json_for_pdf(pdf_path: Path, ocr_service: OCRService,
     print(f"{'='*80}")
 
     try:
-        # Read file as bytes
-        with open(pdf_path, 'rb') as f:
-            file_data = f.read()
+        # Handle .eml files differently (extract text, no OCR needed)
+        if pdf_path.suffix.lower() == '.eml':
+            print(f"\n1. Extracting text from email file...")
+            with open(pdf_path, 'rb') as f:
+                msg = email.message_from_binary_file(f)
 
-        # Detect MIME type
-        mime_type, _ = mimetypes.guess_type(str(pdf_path))
-        if not mime_type:
-            # Default to PDF if can't detect
-            mime_type = 'application/pdf'
+            # Extract email body
+            ocr_text = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        ocr_text += part.get_payload(decode=True).decode('utf-8', errors='ignore')
+            else:
+                ocr_text = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
 
-        # Run OCR
-        print(f"\n1. Running OCR... (MIME type: {mime_type})")
-        ocr_text = ocr_service.extract_text_from_file(
-            file_data=file_data,
-            mime_type=mime_type,
-            filename=pdf_path.name
-        )
+            if not ocr_text or ocr_text.strip() == '':
+                print(f"  ✗ No text extracted from email - skipping")
+                return False
 
-        if not ocr_text or ocr_text.strip() == '':
-            print(f"  ✗ OCR extracted no text - skipping")
-            return False
+            print(f"   ✓ Extracted {len(ocr_text)} characters from email")
 
-        print(f"   ✓ OCR extracted {len(ocr_text)} characters")
+        else:
+            # Read file as bytes for PDF/image OCR
+            with open(pdf_path, 'rb') as f:
+                file_data = f.read()
+
+            # Detect MIME type
+            mime_type, _ = mimetypes.guess_type(str(pdf_path))
+            if not mime_type:
+                # Default to PDF if can't detect
+                mime_type = 'application/pdf'
+
+            # Run OCR
+            print(f"\n1. Running OCR... (MIME type: {mime_type})")
+            ocr_text = ocr_service.extract_text_from_file(
+                file_data=file_data,
+                mime_type=mime_type,
+                filename=pdf_path.name
+            )
+
+            if not ocr_text or ocr_text.strip() == '':
+                print(f"  ✗ OCR extracted no text - skipping")
+                return False
+
+            print(f"   ✓ OCR extracted {len(ocr_text)} characters")
 
         # Parse
         print(f"\n2. Parsing extracted text...")
@@ -115,7 +138,7 @@ def generate_json_for_pdf(pdf_path: Path, ocr_service: OCRService,
 
 
 def find_receipts_without_json(receipts_dir: Path, folder: str = None) -> List[Path]:
-    """Find all receipt files (PDFs and images) that don't have matching JSON files."""
+    """Find all receipt files (PDFs, images, and emails) that don't have matching JSON files."""
 
     if folder:
         search_dirs = [receipts_dir / folder]
@@ -128,8 +151,8 @@ def find_receipts_without_json(receipts_dir: Path, folder: str = None) -> List[P
 
     receipts_without_json = []
 
-    # Look for PDFs and common image formats
-    extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png']
+    # Look for PDFs, images, and email files
+    extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png', '*.eml']
 
     for search_dir in search_dirs:
         if not search_dir.exists():
@@ -179,7 +202,7 @@ def main():
             ]
 
         receipt_files = []
-        extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png']
+        extensions = ['*.pdf', '*.jpg', '*.jpeg', '*.png', '*.eml']
         for search_dir in search_dirs:
             if search_dir.exists():
                 for ext in extensions:

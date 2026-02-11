@@ -17,6 +17,7 @@ Each ADR follows this structure:
 - [ADR-0001](ADR-0001-review-ui-with-ml-training.md) - Review UI with ML Training Data Collection
 - [ADR-0002](ADR-0002-semantic-duplicate-detection.md) - Semantic Duplicate Detection Strategy
 - [ADR-0003](ADR-0003-person-name-vendor-filtering.md) - Person Name Detection in Vendor Extraction
+- [ADR-0004](ADR-0004-bbox-spatial-extraction.md) - Bounding Box Spatial Extraction for Receipt Parsing
 
 _More ADRs will be added as architectural decisions are made._
 

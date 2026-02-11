@@ -247,10 +247,10 @@ class ReceiptParser:
             ),
             PatternSpec(
                 name='harmonized_sales_tax',
-                pattern=r'harmonized\s+sales\s+tax[\s\S]*?([\d,]+\.\d{2})',
+                pattern=r'harmonized\s+sales\s+tax[^\n]*\n[^\n]*?(\d{1,2}\.\d{2})$',
                 example='Harmonized Sales Tax - Canada - 100092287\nRT00012.65',
-                notes='Full "Harmonized Sales Tax" multi-line with attached prefix (Air Canada fix)',
-                flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+                notes='Full "Harmonized Sales Tax" multi-line - extracts amount at end of next line (Air Canada fix)',
+                flags=re.IGNORECASE | re.MULTILINE,
             ),
             PatternSpec(
                 name='tax_pipe_separator',
