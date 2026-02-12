@@ -1,4 +1,4 @@
-# AutoExpense: Claude Agent Instructions
+# orios.ca: Claude Agent Instructions
 
 **Version**: 1.0
 **Last Updated**: 2026-02-10
@@ -8,7 +8,7 @@
 
 ## Project Summary
 
-**AutoExpense** is a privacy-first expense receipt management tool for busy executives who want zero-effort expense tracking without connecting bank accounts.
+**orios.ca** is a privacy-first expense receipt management tool for busy executives who want zero-effort expense tracking without connecting bank accounts.
 
 **Core Value Proposition**: Email forwarding → automatic OCR → structured data → export to accountant. Simple, private, reliable.
 
