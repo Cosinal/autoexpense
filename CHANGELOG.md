@@ -7,7 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes yet._
+### Added
+
+#### Parser Refactoring & Improvements
+- **Comprehensive Regression Test Suite**: 9 tests covering diverse receipt formats
+  - Steam (pipe tables, CAD), GeoGuessr (payment processors, ordinal dates)
+  - LinkedIn (multi-line GST), Uber (email headers), Sephora (dual-tax)
+  - Walmart/Apple (simple vendors), debug metadata validation
+- **PatternSpec Documentation**: All regex patterns now documented with examples and notes
+- **Bounding Box Spatial Extraction (Phase 1)**: Image-based receipts use coordinate-based extraction
+  - BboxExtractor class for spatial search algorithms
+  - 100% accuracy on image receipts (vs 46% on text PDFs)
+  - See: `documents/adr/ADR-0004-bbox-spatial-extraction.md`
+- **Payment Processor Detection**: Filters Paddle, Stripe, PayPal, Square, etc.
+- **Enhanced Business Indicators**: Added "Unlimited", "Premium", "Pro", "Digital", "Games", "Software"
+- **Vendor Parsing Strategy Documentation**: Complete analysis of all possible approaches
+  - Industry analysis (Stripe/Ramp/Brex techniques)
+  - 4-phase improvement roadmap (patterns → database → LLM → ML)
+  - See: `documents/VENDOR_PARSING_STRATEGIES.md`
+
+### Changed
+- **Vendor Scoring**: Removed penalty for single-word vendor names (Walmart, Apple, Uber)
+- **Word Count Penalty**: Only penalizes names with >5 words (not single-word names)
+- **Skip Patterns**: Enhanced to filter "Invoice from", "via X", currency-amount patterns
+
+### Fixed
+- **Vendor Extraction Improvements**:
+  - Single-word vendors (Walmart, Apple) now score properly
+  - Payment processors no longer overshadow actual merchants
+  - Document metadata ("Invoice From") filtered out
+  - Amount-like patterns ("Ca699" from "CA$6.99") filtered out
+
+### Current Status
+- **Overall Accuracy**: 75.4% (49/65 fields across 13 receipts)
+  - Currency: 100.0% (13/13) ✓
+  - Amount: 84.6% (11/13) ✓
+  - Date: 76.9% (10/13)
+  - Tax: 69.2% (9/13)
+  - Vendor: 46.2% (6/13) ⚠️ Needs improvement
+- **Target**: 90%+ overall accuracy
+
+### Known Issues
+- **Vendor extraction** at 46.2% due to:
+  - OCR spacing artifacts ("I N V O I C" instead of "INVOICE")
+  - Forwarded emails extracting forwarder name instead of merchant
+  - Multi-line receipts extracting product names or customer names
+- **Tax extraction** issues with multi-line patterns (Air Canada RT00012.65 → 12.65 vs 2.65)
+- **Date extraction** failing on some receipts with non-standard formats
+
+### Files Changed
+- `src/backend/app/services/parser.py` - Payment processor filtering, skip patterns
+- `src/backend/app/services/bbox_extractor.py` - Spatial extraction (new)
+- `src/backend/app/services/ocr.py` - Bbox data extraction methods
+- `src/backend/app/utils/scoring.py` - Fixed word count penalty, business indicators
+- `src/backend/tests/test_parser_regression.py` - Comprehensive test suite (new)
+- `documents/VENDOR_PARSING_STRATEGIES.md` - Strategy documentation (new)
+- `documents/adr/ADR-0004-bbox-spatial-extraction.md` - Bbox ADR (new)
 
 ---
 
