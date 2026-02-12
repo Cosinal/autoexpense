@@ -70,8 +70,15 @@ class VendorCandidate(Candidate):
     - has_company_suffix: Ends with Inc, LLC, Ltd, Corp, etc.
     - is_title_case: Proper capitalization
     - word_count: Number of words (2-4 is ideal)
+
+    Normalization stages (Phase 2 enhancement):
+    - raw_line: Original OCR text (e.g., "U B E R")
+    - normalized_line: After OCR normalization (e.g., "UBER")
+    - value: Final display format (e.g., "Uber")
     """
     value: str
+    raw_line: str = ""  # Original OCR text
+    normalized_line: str = ""  # After OCR normalization
     from_email_header: bool = False
     from_subject: bool = False
     line_position: int = 999
@@ -160,21 +167,33 @@ def create_amount_candidate(
                 # Must have newline or start of text before keyword to be valid
                 keyword_start = immediate_prefix.lower().rfind(keyword)
                 if keyword_start == 0 or immediate_prefix[keyword_start - 1] == '\n':
-                    # Verify it's not "tax total" or "subtotal"
-                    if 'tax ' + keyword not in immediate_prefix.lower():
-                        if 'sub' + keyword not in immediate_prefix.lower():
-                            has_strong_prefix = True
-                            break
+                    # Verify it's not "tax total", "sales tax total", or "subtotal"
+                    # Check for both "tax total" and "tax\ntotal" patterns
+                    prefix_before_keyword = immediate_prefix[:keyword_start].lower()
+                    if 'tax' in prefix_before_keyword:
+                        # Tax total or sales tax total - skip
+                        continue
+                    if 'sub' + keyword in immediate_prefix.lower():
+                        # Subtotal - skip
+                        continue
+                    has_strong_prefix = True
+                    break
 
     # Find proximity to keywords (check full context window)
     proximity = 999
     for keyword in strong_keywords:
         pos = context.find(keyword)
         if pos != -1:
-            # Exclude "tax total" and "subtotal"
-            if 'tax ' + keyword not in context[max(0, pos-4):pos+len(keyword)+4]:
-                if 'sub' + keyword not in context[max(0, pos-3):pos+len(keyword)+3]:
-                    proximity = min(proximity, abs(pos - (start - context_start)))
+            # Exclude "tax total", "sales tax total", and "subtotal"
+            # Check for "tax" before the keyword (with space or newline)
+            context_before_keyword = context[max(0, pos-10):pos]
+            if 'tax' in context_before_keyword:
+                # Tax total or sales tax total - skip
+                continue
+            if 'sub' + keyword in context[max(0, pos-3):pos+len(keyword)+3]:
+                # Subtotal - skip
+                continue
+            proximity = min(proximity, abs(pos - (start - context_start)))
 
     # Penalty contexts - more precise boundaries
     # Only penalize if subtotal is within 30 chars AND we don't have a strong prefix
@@ -182,8 +201,15 @@ def create_amount_candidate(
     in_subtotal_context = 'subtotal' in preceding_30 and not has_strong_prefix
 
     # Blacklist terms that suggest this is NOT a transaction total
+    # Aligned with parser.py blacklist_contexts
     # Note: "credit card" is a payment method, not a blacklist term
-    blacklist_terms = ['balance', 'refund', 'discount']
+    blacklist_terms = [
+        'balance', 'refund', 'discount',  # Original terms
+        'liability', 'coverage', 'insurance', 'limit', 'maximum', 'up to',  # Insurance/limits
+        'points', 'pts', 'miles', 'rewards',  # Loyalty programs
+        'booking reference', 'confirmation', 'reference',  # IDs/references
+        'tax breakdown', 'breakdown', 'tax %'  # Tax detail sections
+    ]
     in_blacklist_context = any(term in context for term in blacklist_terms)
 
     return AmountCandidate(
@@ -206,19 +232,23 @@ def create_vendor_candidate(
     raw_text: str,
     line_position: int,
     from_email_header: bool = False,
-    from_subject: bool = False
+    from_subject: bool = False,
+    raw_line: str = "",
+    normalized_line: str = ""
 ) -> VendorCandidate:
     """
     Create VendorCandidate with computed structure flags.
 
     Args:
-        value: Extracted vendor name
+        value: Extracted vendor name (final display format)
         pattern_name: Name of pattern that matched
         match_span: Character span of match
         raw_text: Original matched text
         line_position: Line number in text
         from_email_header: Extracted from email From:/Reply-To:
         from_subject: Extracted from email subject
+        raw_line: Original OCR text before normalization
+        normalized_line: After OCR normalization, before cleaning
 
     Returns:
         VendorCandidate with computed flags
@@ -243,6 +273,8 @@ def create_vendor_candidate(
         match_span=match_span,
         raw_text=raw_text,
         priority=100,
+        raw_line=raw_line or raw_text,  # Default to raw_text if not provided
+        normalized_line=normalized_line or value,  # Default to value if not provided
         from_email_header=from_email_header,
         from_subject=from_subject,
         line_position=line_position,

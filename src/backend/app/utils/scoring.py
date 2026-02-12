@@ -5,7 +5,7 @@ Each function returns a score from 0.0 (worst) to 1.0 (best).
 The highest-scoring candidate is selected as the final result.
 """
 
-from typing import List, Optional, TypeVar
+from typing import List, Optional, TypeVar, TYPE_CHECKING
 from decimal import Decimal
 import math
 import re
@@ -17,6 +17,9 @@ from .candidates import (
     DateCandidate,
     CurrencyCandidate
 )
+
+if TYPE_CHECKING:
+    from ..services.parser import ParseContext
 
 __all__ = [
     'select_best_candidate', 'select_top_candidates',
@@ -114,11 +117,16 @@ def _looks_like_person_name(name: str) -> bool:
     return True
 
 
-def score_vendor_candidate(candidate: VendorCandidate) -> float:
+def score_vendor_candidate(
+    candidate: VendorCandidate,
+    is_forwarded: bool = False,
+    context: Optional['ParseContext'] = None
+) -> float:
     """
     Score vendor candidate based on structural features only.
 
     Phase 1 Enhanced: Early-line boosting, improved business context scoring.
+    Phase 2 Enhanced: Forwarding-aware penalties to avoid extracting forwarder name.
 
     NO hardcoded vendor names. Scoring is purely structural:
     - From email header (From:/Reply-To:): 0.9 base
@@ -130,9 +138,12 @@ def score_vendor_candidate(candidate: VendorCandidate) -> float:
     - Line position penalty: -0.02 per line after line 2
     - Word count penalty: -0.1 if > 5 words
     - Person name penalty: -0.6 if looks like "First Last" from email header (likely forwarded)
+    - Forwarding penalty: Heavy penalties for email header candidates when forwarded
 
     Args:
         candidate: VendorCandidate to score
+        is_forwarded: True if email is detected as forwarded
+        context: Optional ParseContext with sender metadata
 
     Returns:
         Score from 0.0 to 1.0
@@ -187,6 +198,28 @@ def score_vendor_candidate(candidate: VendorCandidate) -> float:
     if candidate.from_email_header or candidate.pattern_name == 'context_sender_name':
         if _looks_like_person_name(candidate.value):
             base_score -= 0.6  # Heavy penalty - likely customer, not vendor
+
+    # PHASE 2 ENHANCEMENT: Forwarding-aware penalties
+    # When email is forwarded, email header candidates are likely the forwarder, not vendor
+    if is_forwarded:
+        # Heavy penalty for email header candidates that match sender name
+        if candidate.from_email_header or candidate.pattern_name == 'context_sender_name':
+            # Check if candidate matches sender name (likely forwarder's name)
+            if context and context.sender_name:
+                candidate_lower = candidate.value.lower()
+                sender_lower = context.sender_name.lower()
+
+                # Exact or partial match with sender name
+                if candidate_lower in sender_lower or sender_lower in candidate_lower:
+                    base_score -= 0.7  # Very heavy penalty - this is the forwarder
+
+            # Pattern-based penalty for email metadata when forwarded
+            if candidate.pattern_name in ['context_sender_name', 'from_header_in_text']:
+                base_score -= 0.5
+
+        # Subject line less reliable when forwarded
+        if candidate.from_subject:
+            base_score -= 0.3
 
     # Clamp to [0.0, 1.0]
     return max(0.0, min(1.0, base_score))
@@ -299,20 +332,24 @@ def select_top_candidates(
 
 def select_best_candidate(
     candidates: List[T],
-    score_func
-) -> Optional[T]:
+    score_func,
+    return_score: bool = False
+) -> Optional[T | tuple[T, float]]:
     """
     Select best candidate from list using scoring function.
 
     Args:
         candidates: List of candidates to score
         score_func: Function that takes a candidate and returns a score
+        return_score: If True, return (candidate, score) tuple instead of just candidate
 
     Returns:
-        Highest-scoring candidate, or None if empty list
+        If return_score=True: (candidate, score) tuple or None
+        If return_score=False: candidate or None (legacy behavior)
 
     Example:
         >>> best = select_best_candidate(amount_candidates, score_amount_candidate)
+        >>> best, score = select_best_candidate(amount_candidates, score_amount_candidate, return_score=True)
     """
     if not candidates:
         return None
@@ -330,22 +367,25 @@ def select_best_candidate(
     if best_score < 0.3:
         return None
 
-    return best_candidate
+    return (best_candidate, best_score) if return_score else best_candidate
 
 
 def select_best_amount(
     candidates: List[AmountCandidate],
-    text: str
-) -> Optional[AmountCandidate]:
+    text: str,
+    return_score: bool = False
+) -> Optional[AmountCandidate | tuple[AmountCandidate, float]]:
     """
     Select best amount candidate.
 
     Args:
         candidates: List of AmountCandidate objects
         text: Full text for context scoring
+        return_score: If True, return (candidate, score) tuple
 
     Returns:
-        Best candidate or None
+        If return_score=True: (candidate, score) tuple or None
+        If return_score=False: candidate or None
     """
     if not candidates:
         return None
@@ -364,62 +404,94 @@ def select_best_amount(
     if best_score < 0.3:
         return None
 
-    return best_candidate
+    return (best_candidate, best_score) if return_score else best_candidate
 
 
 def select_best_vendor(
-    candidates: List[VendorCandidate]
-) -> Optional[VendorCandidate]:
+    candidates: List[VendorCandidate],
+    is_forwarded: bool = False,
+    context: Optional['ParseContext'] = None,
+    return_score: bool = False
+) -> Optional[VendorCandidate | tuple[VendorCandidate, float]]:
     """
-    Select best vendor candidate.
+    Select best vendor candidate with forwarding awareness.
 
     Args:
         candidates: List of VendorCandidate objects
+        is_forwarded: True if email is detected as forwarded
+        context: Optional ParseContext with sender metadata
+        return_score: If True, return (candidate, score) tuple
 
     Returns:
-        Best candidate or None
+        If return_score=True: (candidate, score) tuple or None
+        If return_score=False: candidate or None
     """
-    return select_best_candidate(candidates, score_vendor_candidate)
+    def score_with_context(c: VendorCandidate) -> float:
+        return score_vendor_candidate(c, is_forwarded, context)
+
+    return select_best_candidate(candidates, score_with_context, return_score)
 
 
 def select_best_date(
-    candidates: List[DateCandidate]
-) -> Optional[DateCandidate]:
+    candidates: List[DateCandidate],
+    return_score: bool = False
+) -> Optional[DateCandidate | tuple[DateCandidate, float]]:
     """
     Select best date candidate.
 
     Args:
         candidates: List of DateCandidate objects
+        return_score: If True, return (candidate, score) tuple
 
     Returns:
-        Best candidate or None
+        If return_score=True: (candidate, score) tuple or None
+        If return_score=False: candidate or None
     """
-    return select_best_candidate(candidates, score_date_candidate)
+    return select_best_candidate(candidates, score_date_candidate, return_score)
 
 
 def select_best_currency(
-    candidates: List[CurrencyCandidate]
-) -> Optional[CurrencyCandidate]:
+    candidates: List[CurrencyCandidate],
+    return_score: bool = False
+) -> Optional[CurrencyCandidate | tuple[CurrencyCandidate, float]]:
     """
     Select best currency candidate.
 
     Args:
         candidates: List of CurrencyCandidate objects
+        return_score: If True, return (candidate, score) tuple
 
     Returns:
-        Best candidate or None
+        If return_score=True: (candidate, score) tuple or None
+        If return_score=False: candidate or None
     """
-    return select_best_candidate(candidates, score_currency_candidate)
+    return select_best_candidate(candidates, score_currency_candidate, return_score)
 
 
 # Top N candidate selection functions for review UI
 
 def select_top_vendors(
     candidates: List[VendorCandidate],
+    is_forwarded: bool = False,
+    context: Optional['ParseContext'] = None,
     top_n: int = 3
 ) -> List[tuple[VendorCandidate, float]]:
-    """Select top N vendor candidates with scores."""
-    return select_top_candidates(candidates, score_vendor_candidate, top_n)
+    """
+    Select top N vendor candidates with scores and forwarding awareness.
+
+    Args:
+        candidates: List of VendorCandidate objects
+        is_forwarded: True if email is detected as forwarded
+        context: Optional ParseContext with sender metadata
+        top_n: Number of top candidates to return
+
+    Returns:
+        List of (candidate, score) tuples, sorted by score descending
+    """
+    def score_with_context(c: VendorCandidate) -> float:
+        return score_vendor_candidate(c, is_forwarded, context)
+
+    return select_top_candidates(candidates, score_with_context, top_n)
 
 
 def select_top_amounts(

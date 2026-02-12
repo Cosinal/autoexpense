@@ -206,7 +206,8 @@ class ReceiptParser:
         self.blacklist_contexts = [
             'liability', 'coverage', 'insurance', 'limit', 'maximum',
             'up to', 'points', 'pts', 'booking reference', 'confirmation',
-            'reference', 'miles', 'rewards'
+            'reference', 'miles', 'rewards',
+            'tax breakdown', 'breakdown', 'tax %'  # Tax detail sections
         ]
 
         # Date patterns
@@ -414,6 +415,14 @@ class ReceiptParser:
             'confidence': 0.0,
             'debug': debug,
         }
+
+        # Validate amount consistency (subtotal + tax ≈ total)
+        self._validate_amount_consistency(
+            result['amount'],
+            result['tax'],
+            text,
+            debug
+        )
 
         result['confidence'] = self._calculate_confidence(result)
 
@@ -940,25 +949,30 @@ class ReceiptParser:
                         )
                         candidates.append(candidate)
 
-            # Select best candidate using structural scoring
-            best = select_best_vendor(candidates)
+            # Select best candidate using structural scoring with forwarding awareness
+            result = select_best_vendor(
+                candidates,
+                is_forwarded=is_forwarded,
+                context=context,
+                return_score=True
+            )
 
-            if best:
+            if result:
+                best, score = result  # Unpack (candidate, score) tuple
+
                 # Record provenance in debug
                 if _debug is not None:
                     _debug['patterns_matched']['vendor'] = best.pattern_name
-                    # Confidence based on source
-                    if best.from_email_header:
-                        _debug['confidence_per_field']['vendor'] = 0.9
-                    elif best.from_subject:
-                        _debug['confidence_per_field']['vendor'] = 0.7
-                    elif best.has_company_suffix:
-                        _debug['confidence_per_field']['vendor'] = 0.8
-                    else:
-                        _debug['confidence_per_field']['vendor'] = 0.5
+                    # Use real score from scoring function (not hardcoded)
+                    _debug['confidence_per_field']['vendor'] = round(score, 2)
 
                     # Capture top 3 candidates for review UI
-                    top_3 = select_top_vendors(candidates, top_n=3)
+                    top_3 = select_top_vendors(
+                        candidates,
+                        is_forwarded=is_forwarded,
+                        context=context,
+                        top_n=3
+                    )
                     _debug['vendor_candidates'] = [
                         {
                             'value': c.value,
@@ -976,14 +990,32 @@ class ReceiptParser:
             logger.warning("Error extracting vendor", exc_info=True)
             return None
 
-    def _clean_vendor_name(self, name: str) -> str:
-        """Clean and format vendor name."""
+    def _clean_vendor_name(self, name: str, preserve_case: bool = False) -> str:
+        """
+        Clean and format vendor name.
+
+        Args:
+            name: Raw vendor name
+            preserve_case: If True, don't apply title case (preserve original formatting)
+
+        Returns:
+            Cleaned vendor name
+        """
+        # Remove special characters (preserve &, ', -)
         name = re.sub(r'[^A-Za-z0-9\s&\'-]', '', name)
-        name = name.title()
+
+        # Apply title case unless preserving original
+        if not preserve_case:
+            name = name.title()
+
+        # Normalize whitespace
         name = ' '.join(name.split())
+
+        # Limit to 6 words (prevent extracting too much text)
         words = name.split()
         if len(words) > 6:
             name = ' '.join(words[:6])
+
         return name.strip()
 
     def extract_amount(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[Decimal]:
@@ -1037,13 +1069,16 @@ class ReceiptParser:
                     candidates.append(candidate)
 
             # Select best candidate using scoring
-            best = select_best_amount(candidates, text)
+            result = select_best_amount(candidates, text, return_score=True)
 
-            if best:
+            if result:
+                best, score = result  # Unpack (candidate, score) tuple
+
                 # Record provenance in debug metadata
                 if _debug is not None:
                     _debug['patterns_matched']['amount'] = best.pattern_name
-                    _debug['confidence_per_field']['amount'] = 1.0 / best.priority
+                    # Use real score from scoring function (not 1.0/priority)
+                    _debug['confidence_per_field']['amount'] = round(score, 2)
                     _debug['amount_match_span'] = best.match_span
 
                     # Capture top 3 candidates for review UI
@@ -1218,12 +1253,15 @@ class ReceiptParser:
                     pass
 
             # Select best candidate
-            best = select_best_currency(candidates)
+            result = select_best_currency(candidates, return_score=True)
 
-            if best:
+            if result:
+                best, score = result  # Unpack (candidate, score) tuple
+
                 if _debug is not None:
                     _debug['patterns_matched']['currency'] = best.pattern_name
-                    _debug['confidence_per_field']['currency'] = 0.9 if best.is_explicit else 0.6
+                    # Use real score from scoring function (not hardcoded 0.9/0.6)
+                    _debug['confidence_per_field']['currency'] = round(score, 2)
 
                     # Capture top 3 candidates for review UI
                     top_3 = select_top_currencies(candidates, top_n=3)
@@ -1370,17 +1408,16 @@ class ReceiptParser:
                     candidates.append(candidate)
 
             # Select best candidate using scoring
-            best = select_best_date(candidates)
+            result = select_best_date(candidates, return_score=True)
 
-            if best:
+            if result:
+                best, score = result  # Unpack (candidate, score) tuple
+
                 # Record provenance in debug
                 if _debug is not None:
                     _debug['patterns_matched']['date'] = best.pattern_name
-                    # Confidence based on pattern type and ambiguity
-                    if best.is_ambiguous:
-                        _debug['confidence_per_field']['date'] = 0.7
-                    else:
-                        _debug['confidence_per_field']['date'] = 0.9
+                    # Use real score from scoring function (not hardcoded 0.7/0.9)
+                    _debug['confidence_per_field']['date'] = round(score, 2)
 
                     # Capture top 3 candidates for review UI
                     top_3 = select_top_dates(candidates, top_n=3)
@@ -1482,6 +1519,74 @@ class ReceiptParser:
         except (re.error, AttributeError, InvalidOperation):
             logger.warning("Error extracting tax", exc_info=True)
             return None
+
+    def _validate_amount_consistency(
+        self,
+        amount: Optional[Decimal],
+        tax: Optional[Decimal],
+        text: str,
+        _debug: Optional[Dict] = None
+    ) -> bool:
+        """
+        Sanity check: If subtotal and tax exist, verify subtotal + tax ≈ total.
+
+        This helps detect extraction errors where we pick up the wrong amount.
+
+        Args:
+            amount: Extracted total amount
+            tax: Extracted tax amount
+            text: Full receipt text
+            _debug: Optional debug metadata dictionary
+
+        Returns:
+            True if consistent or check cannot be performed (not enough data)
+            False if inconsistent (likely extraction error)
+        """
+        if not amount or not tax:
+            return True  # Can't validate without both
+
+        # Try to find subtotal in text
+        subtotal_patterns = [
+            r'(?:sub\s*total|subtotal)[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+            r'(?:before\s*tax)[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*\.\d{2})',
+        ]
+
+        subtotal = None
+        for pattern in subtotal_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    subtotal_str = match.group(1).replace(',', '')
+                    subtotal = Decimal(subtotal_str)
+                    break
+                except (InvalidOperation, ValueError):
+                    continue
+
+        if not subtotal:
+            return True  # No subtotal found, can't validate
+
+        # Check: subtotal + tax ≈ total (within 1% tolerance or $0.02)
+        calculated_total = subtotal + tax
+        tolerance = max(amount * Decimal('0.01'), Decimal('0.02'))
+        is_consistent = abs(calculated_total - amount) <= tolerance
+
+        # Record validation in debug metadata
+        if _debug is not None:
+            _debug['amount_validation'] = {
+                'subtotal': str(subtotal),
+                'tax': str(tax),
+                'calculated_total': str(calculated_total),
+                'extracted_total': str(amount),
+                'tolerance': str(tolerance),
+                'is_consistent': is_consistent
+            }
+
+            if not is_consistent:
+                _debug['warnings'].append(
+                    f'Amount inconsistency: subtotal ({subtotal}) + tax ({tax}) = {calculated_total} != total ({amount})'
+                )
+
+        return is_consistent
 
     def _calculate_confidence(self, parsed_data: Dict[str, Any]) -> float:
         """
