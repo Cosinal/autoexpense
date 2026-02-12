@@ -93,6 +93,8 @@ async def export_csv(
             'Amount',
             'Currency',
             'Tax',
+            'Review Status',
+            'Validation Warnings',
             'File Name',
             'File URL',
             'Receipt ID'
@@ -103,13 +105,59 @@ async def export_csv(
             # Generate signed URL for file access
             file_url = get_signed_url(receipt.get('file_url', ''))
 
+            # Format amounts with 2 decimal places
+            amount = receipt.get('amount')
+            if amount is not None:
+                try:
+                    amount = f"{float(amount):.2f}"
+                except (ValueError, TypeError):
+                    amount = 'N/A'
+            else:
+                amount = 'N/A'
+
+            tax = receipt.get('tax')
+            if tax is not None:
+                try:
+                    tax = f"{float(tax):.2f}"
+                except (ValueError, TypeError):
+                    tax = 'N/A'
+            else:
+                tax = 'N/A'
+
+            # Review status
+            needs_review = receipt.get('needs_review', False)
+            review_status = 'Needs Review' if needs_review else 'Reviewed'
+
+            # Validation warnings from ingestion_debug
+            warnings = []
+            debug = receipt.get('ingestion_debug', {})
+            if debug:
+                # Check for amount validation issues
+                amount_validation = debug.get('amount_validation', {})
+                if amount_validation and not amount_validation.get('is_consistent', True):
+                    warnings.append('Amount inconsistency detected')
+
+                # Check for low confidence fields
+                confidence_per_field = debug.get('confidence_per_field', {})
+                for field, conf in confidence_per_field.items():
+                    if conf < 0.7:
+                        warnings.append(f'Low confidence {field} ({conf:.2f})')
+
+                # Check for forwarded email
+                if debug.get('vendor_is_forwarded'):
+                    warnings.append('Forwarded email')
+
+            warnings_str = '; '.join(warnings) if warnings else 'None'
+
             writer.writerow([
-                receipt.get('date', ''),
-                receipt.get('vendor', ''),
-                receipt.get('amount', ''),
-                receipt.get('currency', 'USD'),
-                receipt.get('tax', ''),
-                receipt.get('file_name', ''),
+                receipt.get('date') or 'N/A',
+                receipt.get('vendor') or 'N/A',
+                amount,
+                receipt.get('currency') or 'USD',
+                tax,
+                review_status,
+                warnings_str,
+                receipt.get('file_name') or 'N/A',
                 file_url,
                 receipt.get('id', '')
             ])

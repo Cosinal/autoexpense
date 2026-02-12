@@ -429,7 +429,59 @@ class ReceiptParser:
         # Capture top candidates for fields that need review (confidence < 0.7)
         self._capture_review_candidates(text, context, result, debug)
 
+        # PHASE 1 LAUNCH: Explicit review flag for safety-critical routing
+        # Prevent auto-export when any critical field has low confidence
+        result['needs_review'] = self._requires_review(result, debug)
+
         return result
+
+    def _requires_review(
+        self,
+        result: Dict[str, Any],
+        debug: Dict[str, Any]
+    ) -> bool:
+        """
+        Determine if receipt needs manual review before export.
+
+        PHASE 1 LAUNCH: Critical safety gate to prevent silent errors.
+
+        Returns True if ANY of:
+        - Overall confidence < 0.7
+        - Vendor confidence < 0.7 (critical for categorization)
+        - Amount confidence < 0.7 (critical for accounting)
+        - Amount validation failed (subtotal + tax != total)
+        - Any extraction completely failed (None/missing)
+
+        Args:
+            result: Parsed receipt data
+            debug: Debug metadata with confidence scores
+
+        Returns:
+            True if receipt should be reviewed before export
+        """
+        # Check overall confidence
+        if result.get('confidence', 0.0) < 0.7:
+            return True
+
+        # Check critical field confidence
+        confidence_per_field = debug.get('confidence_per_field', {})
+
+        vendor_conf = confidence_per_field.get('vendor', 0.0)
+        amount_conf = confidence_per_field.get('amount', 0.0)
+
+        if vendor_conf < 0.7 or amount_conf < 0.7:
+            return True
+
+        # Check if any critical field is missing
+        if result.get('vendor') is None or result.get('amount') is None:
+            return True
+
+        # Check amount consistency validation
+        validation = debug.get('amount_validation', {})
+        if validation and not validation.get('is_consistent', True):
+            return True  # Inconsistent subtotal+tax should be reviewed
+
+        return False
 
     def _capture_review_candidates(
         self,
@@ -528,18 +580,32 @@ class ReceiptParser:
                 text = new_text
         return text
 
-    def _normalize_vendor_ocr(self, text: str) -> str:
+    def _normalize_vendor_ocr(self, text: str, is_early_line: bool = False) -> str:
         """
         Aggressive OCR normalization specifically for vendor extraction.
         Handles cases like "I N V O I C E" → "INVOICE" and "H S T" → "HST".
 
-        Phase 1 Enhancement: More aggressive than general OCR normalization.
+        Phase 1 Launch: Extra aggressive normalization for early lines (0-10)
+        where vendor names typically appear.
+
+        Args:
+            text: Text to normalize
+            is_early_line: If True, apply even more aggressive normalization
         """
-        # Step 1: Collapse excessive character-level spacing
-        # "I N V O I C E" → "INVOICE"
-        if re.search(r'[A-Z]\s+[A-Z]\s+[A-Z]', text):
-            # Remove all single spaces between single capital letters
-            text = re.sub(r'\b([A-Z])\s+(?=[A-Z]\b)', r'\1', text)
+        # PHASE 1 LAUNCH: Extra aggressive for early lines (header area)
+        if is_early_line:
+            # Handle both uppercase AND lowercase single-char spacing
+            # "I N V O I C E" → "INVOICE"
+            # "i n v o i c e" → "invoice"
+            if re.search(r'[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]', text):
+                # Remove ALL single spaces between single characters (upper or lower)
+                text = re.sub(r'\b([A-Za-z])\s+(?=[A-Za-z]\b)', r'\1', text)
+        else:
+            # Standard aggressive normalization (capitals only)
+            # "I N V O I C E" → "INVOICE"
+            if re.search(r'[A-Z]\s+[A-Z]\s+[A-Z]', text):
+                # Remove all single spaces between single capital letters
+                text = re.sub(r'\b([A-Z])\s+(?=[A-Z]\b)', r'\1', text)
 
         # Step 2: Collapse multiple spaces
         text = re.sub(r'\s{2,}', ' ', text)
@@ -593,7 +659,7 @@ class ReceiptParser:
         """
         Combine adjacent lines that look like split vendor names.
 
-        Phase 1 Enhancement: Handles cases like "Apple\\nStore" → "Apple Store"
+        Phase 1 Launch: Enhanced for airline names ("Air\\nCanada") and business keywords.
 
         Args:
             lines: List of text lines
@@ -609,6 +675,12 @@ class ReceiptParser:
             'receipt', 'invoice', 'bill', 'order', 'paid', 'tax',
             'confirmation', 'booking', 'itinerary', 'ticket', 'statement'
         ]
+
+        # Business keywords that strongly suggest vendor continuation
+        business_keywords = ['store', 'shop', 'market', 'cafe', 'coffee', 'restaurant',
+                            'clinic', 'medical', 'pharmacy', 'hotel', 'spa', 'salon',
+                            'eyeware', 'eyecare', 'optical', 'optometry', 'dental',
+                            'airlines', 'airways', 'air']
 
         while i < len(lines):
             line = lines[i].strip()
@@ -626,22 +698,45 @@ class ReceiptParser:
                     any(label in next_line.lower() for label in document_labels)
                 )
 
-                # Combine if both lines look like vendor fragments:
-                # - Both are short (< 20 chars each)
+                # PHASE 1 LAUNCH: Airline-specific combination
+                # "Air" + anything capitalized (e.g., "Air Canada", "Air France")
+                airline_pattern = (
+                    line.lower() == 'air' and
+                    next_line and
+                    next_line[0].isupper() and
+                    len(next_line) < 25 and
+                    not re.search(r'\d', next_line) and
+                    not is_doc_label
+                )
+
+                # PHASE 1 LAUNCH: Business keyword combination
+                # First line + "Store" / "Shop" / etc. (e.g., "Apple Store", "Browz Eyeware")
+                business_continuation = (
+                    line and next_line and
+                    next_line.lower() in business_keywords and
+                    len(line) < 25 and
+                    line[0].isupper() and
+                    not re.search(r'\d', line) and
+                    not is_doc_label
+                )
+
+                # Standard combination logic (more permissive than before)
+                # - Both are short (< 25 chars each, increased from 20)
                 # - Both start with capital letter
                 # - No numbers in either (avoid combining with amounts)
                 # - Combined length < 50 chars
                 # - Not document labels
-                # - Both are single words or both contain spaces (consistency check)
-                should_combine = (
+                standard_combine = (
                     line and next_line and
-                    len(line) < 20 and len(next_line) < 20 and
+                    len(line) < 25 and len(next_line) < 25 and
                     line[0].isupper() and next_line[0].isupper() and
                     not re.search(r'\d', line) and
                     not re.search(r'\d', next_line) and
                     len(line + ' ' + next_line) < 50 and
                     not is_doc_label
                 )
+
+                should_combine = airline_pattern or business_continuation or standard_combine
 
                 if should_combine:
                     combined.append(line + ' ' + next_line)
@@ -877,6 +972,13 @@ class ReceiptParser:
                     r'^\s*itinerary\b',
                     r'^\s*(and|or|but|of|to|for|in|from|via)\s+',  # Skip lines starting with conjunctions/prepositions
                     r'\btariffsopens\b',  # Skip OCR artifact
+                    # PHASE 1 LAUNCH: Skip customer/billing section headers
+                    r'^\s*invoice\s+to\b',  # Skip "Invoice To: Customer Name"
+                    r'^\s*bill\s+to\b',  # Skip "Bill To: Customer Name"
+                    r'^\s*billed\s+to\b',  # Skip "Billed To: Customer Name"
+                    r'^\s*sold\s+to\b',  # Skip "Sold To: Customer Name"
+                    r'^\s*ship\s+to\b',  # Skip "Ship To: Customer Address"
+                    r'^\s*customer\b',  # Skip "Customer: Name" or "Customer Details"
                 ]
                 skip_line = False
                 for pattern in skip_patterns:
@@ -919,9 +1021,11 @@ class ReceiptParser:
                 if re.search(r'[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}', line):
                     continue
 
-                # PHASE 1 ENHANCEMENT: Apply vendor-specific OCR normalization
-                # Handles "I N V O I C" → "Invoice", "H S T" → "Hst"
-                normalized_line = self._normalize_vendor_ocr(line)
+                # PHASE 1 LAUNCH: Apply vendor-specific OCR normalization
+                # Extra aggressive for early lines (0-10) where vendor names appear
+                # Handles "I N V O I C" → "Invoice", "H S T" → "Hst", "i n v o i c e" → "invoice"
+                is_early_line = line_idx < 10
+                normalized_line = self._normalize_vendor_ocr(line, is_early_line=is_early_line)
                 vendor = self._clean_vendor_name(normalized_line)
                 if vendor and len(vendor) > 2:
                     # Person name filtering is handled by scoring function (_looks_like_person_name)

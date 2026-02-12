@@ -156,7 +156,7 @@ def score_vendor_candidate(
     elif candidate.pattern_name == 'payable_to':
         base_score = 0.85  # "Make cheques payable to..." is explicit vendor declaration
     elif candidate.pattern_name == 'business_keyword':
-        base_score = 0.75  # Business-type keywords (Clinic, Eyeware, etc.) strongly indicate vendor
+        base_score = 0.80  # PHASE 1 LAUNCH: Increased from 0.75 - business keywords strongly indicate vendor
     elif candidate.pattern_name == 'company_suffix':
         base_score = 0.7  # Inc/LLC/Ltd strongly indicates business entity
     else:
@@ -168,6 +168,15 @@ def score_vendor_candidate(
 
     if candidate.is_title_case:
         base_score += 0.1
+
+    # PHASE 1 LAUNCH: Retail/business keyword bonus
+    # Strong indicators of actual vendor (not product name or customer)
+    retail_keywords = ['store', 'shop', 'market', 'cafe', 'coffee', 'restaurant',
+                      'eyeware', 'eyecare', 'optical', 'optometry', 'clinic', 'medical',
+                      'pharmacy', 'dental', 'hotel', 'spa', 'salon', 'gym', 'fitness']
+    candidate_lower = candidate.value.lower()
+    if any(keyword in candidate_lower for keyword in retail_keywords):
+        base_score += 0.15  # Boost for retail/service business indicators
 
     # PHASE 1 ENHANCEMENT: Early-line boosting
     # Vendor typically appears in first 3 lines - give strong preference
@@ -197,7 +206,7 @@ def score_vendor_candidate(
     # This handles cases where user forwards receipt and their name appears as sender
     if candidate.from_email_header or candidate.pattern_name == 'context_sender_name':
         if _looks_like_person_name(candidate.value):
-            base_score -= 0.6  # Heavy penalty - likely customer, not vendor
+            base_score -= 0.8  # PHASE 1 LAUNCH: Increased from -0.6 to -0.8 - very heavy penalty for person names
 
     # PHASE 2 ENHANCEMENT: Forwarding-aware penalties
     # When email is forwarded, email header candidates are likely the forwarder, not vendor
