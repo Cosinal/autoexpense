@@ -96,10 +96,36 @@ class BboxExtractor:
             word_text = word.text if case_sensitive else word.text.lower()
 
             for keyword in keywords:
+                # Match if keyword is in word text
                 if keyword in word_text:
                     return word
 
         return None
+
+    def find_all_labels(self, keywords: List[str], case_sensitive: bool = False) -> List[Word]:
+        """
+        Find all occurrences of label keywords.
+
+        Args:
+            keywords: List of keywords to search
+            case_sensitive: Whether to match case
+
+        Returns:
+            List of matching words
+        """
+        if not case_sensitive:
+            keywords = [k.lower() for k in keywords]
+
+        matches = []
+        for word in self.words:
+            word_text = word.text if case_sensitive else word.text.lower()
+
+            for keyword in keywords:
+                if keyword in word_text:
+                    matches.append(word)
+                    break  # Don't add same word multiple times
+
+        return matches
 
     def find_nearest_number(
         self,
@@ -164,15 +190,19 @@ class BboxExtractor:
                     candidates.append((matched_value, word, distance))
 
             elif direction == 'right-then-down':
-                # Prefer right, but also check below
+                # Prefer right on same line, then below
                 if dx > 0 and dx <= max_distance_x and abs(dy) <= max_distance_y:
-                    # To the right on same line (preferred)
+                    # To the right on same line (highly preferred)
                     distance = (dx ** 2 + dy ** 2) ** 0.5
-                    candidates.append((matched_value, word, distance * 0.8))  # Boost right
-                elif dy > 0 and dy <= max_distance_y and abs(dx) <= max_distance_x:
-                    # Below (fallback)
+                    # Strong boost for same-line (within 20 pixels vertically)
+                    if abs(dy) <= 20:
+                        candidates.append((matched_value, word, distance * 0.5))
+                    else:
+                        candidates.append((matched_value, word, distance * 0.7))
+                elif dy > 0 and dy <= max_distance_y:
+                    # Below (fallback) - less preferred
                     distance = (dx ** 2 + dy ** 2) ** 0.5
-                    candidates.append((matched_value, word, distance))
+                    candidates.append((matched_value, word, distance * 1.2))  # Penalize downward
 
         if not candidates:
             return None
@@ -188,26 +218,55 @@ class BboxExtractor:
         Returns:
             Tax amount as string (e.g., "2.65") or None
         """
-        # 1. Find HST/GST/Tax label
-        label = self.find_label(['HST', 'GST', 'Tax', 'Sales Tax', 'Harmonized'])
-        if not label:
+        # 1. Find all VAT/HST/GST/Tax labels (specific tax keywords only)
+        labels = self.find_all_labels(['VAT', 'HST', 'GST', 'Harmonized'])
+
+        if not labels:
             return None
 
-        # 2. Search right, then down for decimal number
-        result = self.find_nearest_number(
-            label,
-            direction='right-then-down',
-            max_distance_x=400,  # pixels
-            max_distance_y=100,
-            pattern=r'\d{1,3}(?:,\d{3})*\.\d{2}'
-        )
+        # Try each label and collect candidates
+        all_candidates = []
 
-        if result:
-            matched_value, _ = result
-            # Clean and return
-            return matched_value.replace(',', '')
+        for label in labels:
+            # Skip if this looks like it's part of "Total" or "Paid"
+            # (to avoid matching "Total Paid" when looking for tax)
+            label_lower = label.text.lower()
+            if 'total' in label_lower or 'paid' in label_lower or 'amount' in label_lower:
+                continue
 
-        return None
+            # 2. Search right, then down for decimal number
+            result = self.find_nearest_number(
+                label,
+                direction='right-then-down',
+                max_distance_x=600,  # pixels (increased for better coverage)
+                max_distance_y=150,
+                pattern=r'\d{1,3}(?:,\d{3})*\.\d{2}'
+            )
+
+            if result:
+                matched_value, word = result
+                # Calculate actual distance for ranking
+                dx = word.x - (label.x + label.width)
+                dy = word.y - label.y
+                distance = (dx ** 2 + dy ** 2) ** 0.5
+
+                # Boost VAT/HST/GST (more specific than generic "Tax")
+                priority_boost = 1.0
+                if any(kw in label_lower for kw in ['vat', 'hst', 'gst']):
+                    priority_boost = 0.8
+
+                adjusted_distance = distance * priority_boost
+                all_candidates.append((matched_value, adjusted_distance, label.text, word))
+
+        if not all_candidates:
+            return None
+
+        # Return closest match
+        all_candidates.sort(key=lambda x: x[1])
+        matched_value, _, _, _ = all_candidates[0]
+
+        # Clean and return
+        return matched_value.replace(',', '')
 
     def extract_amount(self) -> Optional[str]:
         """
@@ -217,24 +276,56 @@ class BboxExtractor:
             Total amount as string or None
         """
         # Search for "Total", "Amount", "Grand Total", "Paid", etc.
-        label = self.find_label(['Total', 'Amount', 'Paid', 'Grand'])
-        if not label:
+        # Prioritize "Total Paid" or "Grand Total" over just "Total"
+        labels = self.find_all_labels(['Paid', 'Total', 'Amount', 'Grand'])
+
+        if not labels:
             return None
 
-        # Search right, then down for amount
-        result = self.find_nearest_number(
-            label,
-            direction='right-then-down',
-            max_distance_x=400,
-            max_distance_y=100,
-            pattern=r'\d{1,3}(?:,\d{3})*(?:\.\d{2})?'
-        )
+        # Try each label and collect candidates
+        all_candidates = []
 
-        if result:
-            matched_value, _ = result
-            return matched_value.replace(',', '')
+        for label in labels:
+            # Boost priority for "Paid" and "Total" labels
+            priority_boost = 1.0
+            if 'paid' in label.text.lower():
+                priority_boost = 0.7  # Prefer "Paid"
+            elif 'total' in label.text.lower():
+                priority_boost = 0.8  # Prefer "Total"
 
-        return None
+            # Skip "Subtotal" labels
+            if 'sub' in label.text.lower():
+                continue
+
+            # Search right, then down for amount
+            result = self.find_nearest_number(
+                label,
+                direction='right-then-down',
+                max_distance_x=600,
+                max_distance_y=150,
+                pattern=r'\d{1,3}(?:,\d{3})*(?:\.\d{2})?'
+            )
+
+            if result:
+                matched_value, word = result
+                # Calculate actual distance for ranking
+                dx = word.x - (label.x + label.width)
+                dy = word.y - label.y
+                distance = (dx ** 2 + dy ** 2) ** 0.5
+
+                # Apply priority boost to distance (lower is better)
+                adjusted_distance = distance * priority_boost
+
+                all_candidates.append((matched_value, adjusted_distance, label.text, word))
+
+        if not all_candidates:
+            return None
+
+        # Return best match (closest with priority)
+        all_candidates.sort(key=lambda x: x[1])
+        matched_value, _, _, _ = all_candidates[0]
+
+        return matched_value.replace(',', '')
 
     def extract_all(self) -> Dict[str, Optional[str]]:
         """

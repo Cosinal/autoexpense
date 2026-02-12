@@ -100,12 +100,14 @@ def _looks_like_person_name(name: str) -> bool:
         if not word.replace('-', '').replace("'", '').isalpha():  # Only letters (allow hyphen/apostrophe)
             return False
 
-    # Common business suffixes indicate NOT a person name
+    # Common business suffixes and terms indicate NOT a person name
     business_indicators = ['Inc', 'LLC', 'Ltd', 'Limited', 'Corp', 'Corporation',
                           'Co', 'Company', 'Group', 'Partners', 'Associates',
                           'Clinic', 'Medical', 'Pharmacy', 'Store', 'Shop', 'Cafe',
                           'Eyeware', 'Eyecare', 'Optical', 'Optometry', 'Dental',
-                          'Restaurant', 'Bar', 'Grill', 'Hotel', 'Spa', 'Salon']
+                          'Restaurant', 'Bar', 'Grill', 'Hotel', 'Spa', 'Salon',
+                          'Unlimited', 'Premium', 'Pro', 'Plus', 'Express', 'Online',
+                          'Digital', 'Games', 'Software', 'Services', 'Solutions']
     if any(indicator in words for indicator in business_indicators):
         return False
 
@@ -159,8 +161,10 @@ def score_vendor_candidate(candidate: VendorCandidate) -> float:
         line_penalty = min(0.4, (candidate.line_position - 2) * 0.02)
         base_score -= line_penalty
 
-    # Word count penalty (ideal: 2-4 words)
-    if candidate.word_count < 2 or candidate.word_count > 4:
+    # Word count penalty for excessively long names only
+    # Single-word names are valid (Walmart, Apple, Uber, etc.)
+    # Penalize only names with > 5 words (likely extracted too much text)
+    if candidate.word_count > 5:
         base_score -= 0.1
 
     # Person name penalty (detect customer names in forwarded emails)

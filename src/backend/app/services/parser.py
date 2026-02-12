@@ -332,16 +332,40 @@ class ReceiptParser:
             'CAD': 'CAD',
         }
 
-    def parse(self, text: str, context: Optional[ParseContext] = None) -> Dict[str, Any]:
+    def parse(self, text: str, context: Optional[ParseContext] = None, bbox_data: Optional[Dict] = None) -> Dict[str, Any]:
         """
         Parse receipt text and extract all available fields.
 
         Args:
             text: OCR-extracted text from receipt
             context: Optional context with email metadata hints
+            bbox_data: Optional bounding box data for spatial extraction (Phase 2)
 
         Returns:
             Dictionary with parsed fields and candidate options for review
+
+        TODO Phase 2: Integrate bbox spatial extraction
+        =============================================
+        When bbox_data is provided (image-based receipts):
+        1. Try bbox extraction first using BboxExtractor
+        2. Use bbox results for fields with high confidence
+        3. Fall back to pattern-based for missing/low-confidence fields
+        4. Merge results with confidence scoring
+
+        Example integration:
+            if bbox_data:
+                from app.services.bbox_extractor import BboxExtractor
+                bbox_extractor = BboxExtractor(bbox_data)
+
+                # Try bbox extraction
+                bbox_tax = bbox_extractor.extract_tax()
+                bbox_amount = bbox_extractor.extract_amount()
+
+                # Use bbox results if available, fallback to patterns
+                result['tax'] = bbox_tax if bbox_tax else self.extract_tax(text)
+                result['amount'] = bbox_amount if bbox_amount else self.extract_amount(text)
+
+        See: BBOX_PHASE1_RESULTS.md for full integration plan
         """
         # Normalize OCR spacing issues globally before parsing
         # Handles cases like "O c t o b e r 2 6" → "October 26"
@@ -576,7 +600,16 @@ class ReceiptParser:
                                     break  # Found vendor with this keyword, stop checking other keywords
 
             # Strategy 5: Look for company suffixes (structural scoring)
+            # Skip payment processors - these are intermediaries, not the actual vendor
+            payment_processors = ['paddle', 'stripe', 'paypal', 'square', 'shopify',
+                                 'braintree', 'authorize', 'adyen', 'klarna', 'affirm',
+                                 'payment', 'processor', 'merchant']
+
             for line_idx, line in enumerate(lines[:30]):
+                # Skip lines containing payment processor names (check before extraction)
+                if any(proc in line.lower() for proc in payment_processors):
+                    continue
+
                 match = re.search(r'([A-Z][a-zA-Z\s]{2,60}?(?:Incorporated|Inc|LLC|Ltd|Limited|Corp|Corporation|Labs))', line)
                 if match:
                     vendor = self._clean_vendor_name(match.group(1))
@@ -646,10 +679,11 @@ class ReceiptParser:
                     r'^\s*paid\s*$',
                     r'^\s*receipt\s+number\b',  # Skip "Receipt Number: 123"
                     r'^\s*invoice\s+(number|#)\b',
+                    r'^\s*invoice\s+from\b',  # Skip "Invoice from"
                     r'^\s*booking\s+(confirmation|reference)\b',  # Skip "Booking Confirmation"
                     r'^\s*(order\s+)?confirmation\s*$',
                     r'^\s*itinerary\b',
-                    r'^\s*(and|or|but|of|to|for|in)\s+',  # Skip lines starting with conjunctions
+                    r'^\s*(and|or|but|of|to|for|in|from|via)\s+',  # Skip lines starting with conjunctions/prepositions
                     r'\btariffsopens\b',  # Skip OCR artifact
                 ]
                 skip_line = False
@@ -695,8 +729,18 @@ class ReceiptParser:
 
                 vendor = self._clean_vendor_name(line)
                 if vendor and len(vendor) > 2:
-                    # Skip person names (First Last or First Middle Last format)
-                    if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}$', vendor):
+                    # Person name filtering is handled by scoring function (_looks_like_person_name)
+                    # which has more sophisticated checks for business indicators
+
+                    # Skip payment processors (intermediaries, not actual vendors)
+                    payment_processors = ['paddle', 'stripe', 'paypal', 'square', 'shopify',
+                                         'braintree', 'authorize', 'adyen', 'klarna', 'affirm']
+                    if any(proc in vendor.lower() for proc in payment_processors):
+                        continue
+
+                    # Skip amount-like patterns (e.g., "Ca699" from "CA$6.99")
+                    # Match: 2-3 letters followed by digits, or starts with currency code
+                    if re.match(r'^[A-Za-z]{2,3}\d+$', vendor) or re.match(r'^(USD|CAD|EUR|GBP|AUD)\s*\d', vendor, re.IGNORECASE):
                         continue
 
                     generic_phrases = ['your order', 'your trip', 'your receipt', 'your booking']
