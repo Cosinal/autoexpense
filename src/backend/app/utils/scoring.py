@@ -118,14 +118,17 @@ def score_vendor_candidate(candidate: VendorCandidate) -> float:
     """
     Score vendor candidate based on structural features only.
 
+    Phase 1 Enhanced: Early-line boosting, improved business context scoring.
+
     NO hardcoded vendor names. Scoring is purely structural:
     - From email header (From:/Reply-To:): 0.9 base
     - From email subject: 0.7 base
     - From body text: 0.5 base
     - Company suffix (Inc, LLC, Ltd): +0.1
     - Title case: +0.1
-    - Line position penalty: -0.05 per line (earlier is better)
-    - Word count penalty: -0.1 if < 2 or > 4 words
+    - Early-line boost: +0.25 (line 0), +0.15 (line 1), +0.10 (line 2)
+    - Line position penalty: -0.02 per line after line 2
+    - Word count penalty: -0.1 if > 5 words
     - Person name penalty: -0.6 if looks like "First Last" from email header (likely forwarded)
 
     Args:
@@ -155,9 +158,20 @@ def score_vendor_candidate(candidate: VendorCandidate) -> float:
     if candidate.is_title_case:
         base_score += 0.1
 
-    # Line position penalty (earlier lines = better)
-    # Line 0-2: no penalty, Line 10: -0.2, Line 20+: -0.4
-    if candidate.line_position > 2:
+    # PHASE 1 ENHANCEMENT: Early-line boosting
+    # Vendor typically appears in first 3 lines - give strong preference
+    EARLY_LINE_BOOST = {
+        0: 0.25,  # Line 0 (very first line) - strong boost
+        1: 0.15,  # Line 1 - moderate boost
+        2: 0.10,  # Line 2 - small boost
+    }
+
+    if candidate.line_position in EARLY_LINE_BOOST:
+        boost = EARLY_LINE_BOOST[candidate.line_position]
+        base_score += boost
+    elif candidate.line_position > 2:
+        # Line position penalty for lines after 2 (earlier lines = better)
+        # Line 3: -0.02, Line 10: -0.16, Line 20+: -0.36 (capped at -0.4)
         line_penalty = min(0.4, (candidate.line_position - 2) * 0.02)
         base_score -= line_penalty
 

@@ -68,9 +68,36 @@ class ParseContext:
 class ReceiptParser:
     """Service for parsing receipt text and extracting structured data."""
 
+    # PHASE 1: Scoring weight constants (documented for maintainability)
+    # Early-line boosting: Vendor typically appears in first 3 lines
+    EARLY_LINE_BOOST = {
+        0: 0.25,  # Line 0 (very first line) - strong boost
+        1: 0.15,  # Line 1 - moderate boost
+        2: 0.10,  # Line 2 - small boost
+        # Lines 3+: use line position penalty instead
+    }
+
+    # Business context weights: Additional score for business indicators
+    BUSINESS_CONTEXT_WEIGHTS = {
+        'retail': 0.15,       # "Store", "Shop", "Market", "Outlet"
+        'service': 0.12,      # "Clinic", "Salon", "Spa", "Services"
+        'food': 0.12,         # "Restaurant", "Cafe", "Bar", "Grill"
+        'professional': 0.10, # "Inc", "LLC", "Ltd", "Corp"
+        'medical': 0.15,      # "Medical", "Dental", "Optical", "Pharmacy"
+    }
+
+    # Confidence thresholds for Phase 2/3 fallback
+    CONFIDENCE_THRESHOLDS = {
+        'high': 0.8,      # Very confident, no fallback needed
+        'medium': 0.6,    # Moderately confident, consider DB lookup (Phase 2)
+        'low': 0.4,       # Low confidence, needs LLM arbitration (Phase 3)
+        'reject': 0.3,    # Too uncertain, mark for manual review
+    }
+
     def __init__(self):
         """Initialize parser with regex patterns."""
         self._init_patterns()
+        self._forwarded_email_cache = {}  # Cache forwarded detection results
 
     def _init_patterns(self):
         """Initialize regex patterns for parsing."""
@@ -456,16 +483,30 @@ class ReceiptParser:
         Handles cases like:
         - "L o v a b l e" → "Lovable" (character-level spacing)
         - "H S T  -  C a n a d a" → "HST - Canada" (excessive spacing)
+        - "I n v o i c e" → "Invoice" (single-char spacing)
+
+        Phase 1 Enhanced: More aggressive for very high space ratios.
         """
         # Detect excessive spacing (>35% of sample is spaces = likely spaced OCR)
         sample = text[:500]  # Check first 500 chars
         if len(sample) > 0:
             space_ratio = sample.count(' ') / len(sample)
 
-            if space_ratio > 0.35:
+            if space_ratio > 0.45:
+                # VERY aggressive normalization for extreme spacing (> 45%)
+                # Remove ALL single spaces between single characters
+                # "I n v o i c e" → "Invoice"
+                text = re.sub(r'\b([A-Za-z])\s+(?=[A-Za-z]\b)', r'\1', text)
+                # Then collapse remaining multiple spaces
+                text = re.sub(r'\s{2,}', ' ', text)
+                return text
+            elif space_ratio > 0.35:
                 # Aggressive normalization for highly-spaced OCR
                 # Collapse multiple spaces to single space
                 text = re.sub(r'\s{2,}', ' ', text)
+                # Also try character-level fix
+                if re.search(r'[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]', text):
+                    text = re.sub(r'\b([A-Za-z])\s+(?=[A-Za-z]\b)', r'\1', text)
                 return text
 
         # Normal character-level spacing fix for less severe cases
@@ -478,9 +519,136 @@ class ReceiptParser:
                 text = new_text
         return text
 
+    def _normalize_vendor_ocr(self, text: str) -> str:
+        """
+        Aggressive OCR normalization specifically for vendor extraction.
+        Handles cases like "I N V O I C E" → "INVOICE" and "H S T" → "HST".
+
+        Phase 1 Enhancement: More aggressive than general OCR normalization.
+        """
+        # Step 1: Collapse excessive character-level spacing
+        # "I N V O I C E" → "INVOICE"
+        if re.search(r'[A-Z]\s+[A-Z]\s+[A-Z]', text):
+            # Remove all single spaces between single capital letters
+            text = re.sub(r'\b([A-Z])\s+(?=[A-Z]\b)', r'\1', text)
+
+        # Step 2: Collapse multiple spaces
+        text = re.sub(r'\s{2,}', ' ', text)
+
+        # Step 3: Remove noise characters (preserve hyphens, apostrophes, &)
+        text = re.sub(r'[^\w\s&\'-]', '', text)
+
+        # Step 4: Title case for consistency
+        text = text.title()
+
+        return text.strip()
+
+    def _detect_forwarded_email(self, text: str, context: Optional[ParseContext]) -> bool:
+        """
+        Detect if email was forwarded.
+
+        Phase 1 Enhancement: Helps avoid extracting forwarder name as vendor.
+        Returns True if email appears to be forwarded.
+        """
+        # Cache results to avoid re-computing
+        cache_key = hash(text[:500])  # Use first 500 chars as key
+        if cache_key in self._forwarded_email_cache:
+            return self._forwarded_email_cache[cache_key]
+
+        is_forwarded = False
+
+        # Check forwarding indicators in text
+        forwarding_patterns = [
+            r'[-=]+\s*forwarded message\s*[-=]+',
+            r'---------- forwarded',
+            r'begin forwarded message',
+            r'from:.*\n.*to:.*\n.*subject:',  # Multiple headers = forwarded
+        ]
+
+        for pattern in forwarding_patterns:
+            if re.search(pattern, text[:1000], re.IGNORECASE):
+                is_forwarded = True
+                break
+
+        # Check if sender domain is personal email (likely forwarded)
+        if not is_forwarded and context and context.sender_domain:
+            personal_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com',
+                              'icloud.com', 'me.com', 'live.com', 'aol.com']
+            if any(domain in context.sender_domain.lower() for domain in personal_domains):
+                is_forwarded = True
+
+        self._forwarded_email_cache[cache_key] = is_forwarded
+        return is_forwarded
+
+    def _combine_multiline_vendors(self, lines: List[str]) -> List[str]:
+        """
+        Combine adjacent lines that look like split vendor names.
+
+        Phase 1 Enhancement: Handles cases like "Apple\\nStore" → "Apple Store"
+
+        Args:
+            lines: List of text lines
+
+        Returns:
+            List with combined vendor names where applicable
+        """
+        combined = []
+        i = 0
+
+        # Document labels and metadata that should NOT be combined
+        document_labels = [
+            'receipt', 'invoice', 'bill', 'order', 'paid', 'tax',
+            'confirmation', 'booking', 'itinerary', 'ticket', 'statement'
+        ]
+
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # Check if next line continues the vendor name
+            if i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+
+                # Check if either line is a document label
+                is_doc_label = (
+                    line.lower() in document_labels or
+                    next_line.lower() in document_labels or
+                    # Also check for partial matches
+                    any(label in line.lower() for label in document_labels) or
+                    any(label in next_line.lower() for label in document_labels)
+                )
+
+                # Combine if both lines look like vendor fragments:
+                # - Both are short (< 20 chars each)
+                # - Both start with capital letter
+                # - No numbers in either (avoid combining with amounts)
+                # - Combined length < 50 chars
+                # - Not document labels
+                # - Both are single words or both contain spaces (consistency check)
+                should_combine = (
+                    line and next_line and
+                    len(line) < 20 and len(next_line) < 20 and
+                    line[0].isupper() and next_line[0].isupper() and
+                    not re.search(r'\d', line) and
+                    not re.search(r'\d', next_line) and
+                    len(line + ' ' + next_line) < 50 and
+                    not is_doc_label
+                )
+
+                if should_combine:
+                    combined.append(line + ' ' + next_line)
+                    i += 2
+                    continue
+
+            combined.append(line)
+            i += 1
+
+        return combined
+
     def extract_vendor(self, text: str, context: Optional[ParseContext] = None, _debug=None) -> Optional[str]:
         """
         Extract vendor/merchant name using structural scoring (no hardcoded vendor lists).
+
+        Phase 1 Enhanced: Multi-stage pipeline with improved candidate generation.
 
         Args:
             text: Receipt text
@@ -492,8 +660,19 @@ class ReceiptParser:
         try:
             candidates: List[VendorCandidate] = []
 
+            # PHASE 1 ENHANCEMENT: Detect forwarded emails early
+            is_forwarded = self._detect_forwarded_email(text, context)
+            if _debug is not None:
+                _debug['vendor_is_forwarded'] = is_forwarded
+
             # Text is already normalized by parse() method
             lines = text.split('\n')
+
+            # PHASE 1 ENHANCEMENT: Combine multi-line vendor names
+            # E.g., "Apple\nStore" → "Apple Store"
+            combined_lines = self._combine_multiline_vendors(lines)
+            if _debug is not None:
+                _debug['vendor_combined_lines'] = len(combined_lines) != len(lines)
 
             # Strategy 1: Use ParseContext email metadata (highest confidence)
             if context:
@@ -624,11 +803,15 @@ class ReceiptParser:
                         candidates.append(candidate)
 
             # Strategy 4: Fallback to early lines with structural filtering
+            # PHASE 1 ENHANCEMENT: Use combined_lines (multi-line aggregation)
             # Track if we're in a customer/bill-to section to avoid picking up customer name
             in_customer_section = False
             customer_section_end_line = -1
 
-            for line_idx, line in enumerate(lines[:20]):
+            # Map combined line indices back to original line indices for position tracking
+            lines_to_use = combined_lines if len(combined_lines) < len(lines) else lines
+
+            for line_idx, line in enumerate(lines_to_use[:20]):
                 line = line.strip()
 
                 # Detect customer/bill-to section start
@@ -727,7 +910,10 @@ class ReceiptParser:
                 if re.search(r'[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}', line):
                     continue
 
-                vendor = self._clean_vendor_name(line)
+                # PHASE 1 ENHANCEMENT: Apply vendor-specific OCR normalization
+                # Handles "I N V O I C" → "Invoice", "H S T" → "Hst"
+                normalized_line = self._normalize_vendor_ocr(line)
+                vendor = self._clean_vendor_name(normalized_line)
                 if vendor and len(vendor) > 2:
                     # Person name filtering is handled by scoring function (_looks_like_person_name)
                     # which has more sophisticated checks for business indicators
